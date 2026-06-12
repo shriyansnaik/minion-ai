@@ -19,5 +19,5 @@ dependencies = [
 packages = ["minions"]
 
 [project.urls]
-Repository = "https://github.com/shriyansnaik/minions"
+Repository = "https://github.com/shriyansnaik/minion-ai"
 
