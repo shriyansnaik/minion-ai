@@ -2,25 +2,13 @@
 
 ---
 
-## 1. Provider Agnostic (LiteLLM)
+## ~~1. Provider Agnostic (LiteLLM)~~
 
-**Problem:** Right now the code calls `client.responses.parse(...)` which is OpenAI's Responses API.
-Other providers (Anthropic, Gemini, Mistral, etc.) do not have this API, so swapping the provider is not just swapping the key — it requires changing the call itself.
-
-**Solution:** Use [LiteLLM](https://github.com/BerriAI/litellm) as an abstraction layer.
-LiteLLM wraps every major provider behind one unified interface.
-
-**What needs to change:**
-- Replace `client.responses.parse(...)` with a LiteLLM call
-- LiteLLM has structured output support via `response_format` — use that instead of `text_format`
-- `minions.init()` would accept `provider` or just let the model string carry it (LiteLLM style: `"anthropic/claude-opus-4"`, `"gemini/gemini-2.5-pro"`)
-- Drop the custom `get_client()` — LiteLLM handles the client internally
-
-**New init signature:**
-```python
-minions.init(api_key="...", model_prefix="anthropic")
-# or just pass model strings like "anthropic/claude-opus-4" to Minion directly
-```
+- [x] Replace `client.responses.parse(...)` with `litellm.completion()`
+- [x] Structured output via `response_format`
+- [x] Model string carries the provider (`"anthropic/claude-opus-4"`, `"openai/gpt-4o"`, etc.)
+- [x] Drop `client.py` — LiteLLM handles the client internally
+- [x] `init()` sets `litellm.api_key` and `litellm.api_base` globally; env vars work too
 
 ---
 
@@ -68,10 +56,10 @@ minions.init(api_key="...", tracing=True, ui_url="http://localhost:7337")
 
 ---
 
-## 3. Package Setup (pip installable)
+## ~~3. Package Setup (pip installable)~~
 
-- [ ] Add `pyproject.toml` (or `setup.py`)
-- [ ] Decide package name (e.g. `minions-ai`)
-- [ ] Publish to PyPI
+- [x] Add `pyproject.toml`
+- [x] Decide package name → `minion-ai`
+- [x] Publish to PyPI
 - [ ] `minions[ui]` optional dependency group for FastAPI + uvicorn
 - [ ] `minions ui` CLI command to start the UI server locally without Docker
