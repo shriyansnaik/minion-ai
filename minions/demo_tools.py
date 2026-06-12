@@ -1,3 +1,6 @@
+# Demo tools — for reference only. Copy and adapt these when building your own tools.
+# Minion AI does not maintain these as production utilities.
+
 import os
 
 

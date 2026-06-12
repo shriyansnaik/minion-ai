@@ -1,9 +1,11 @@
 import inspect
+import litellm
 import docstring_parser
 from typing import Callable, Literal
 
 from .models import Tool, ToolArg, ToolCall, MinionOutput
-from .client import get_client
+
+litellm.drop_params = True
 
 MINION_BASE_PROMPT = """#Role
 You are Minion, a powerful AI agent. Given user input, produce the best possible output using your available tools.
@@ -175,19 +177,20 @@ class Minion:
         if self.system_prompt:
             self.instructions += f"\n\n## Special Instructions from User\n{self.system_prompt}"
 
-        client = get_client()
-
         for _ in range(self.max_turns):
-            response = client.responses.parse(
+            messages = [
+                {"role": "system", "content": self.instructions},
+                {"role": "user", "content": str(self.conversation)},
+            ]
+            response = litellm.completion(
                 model=self.model,
-                instructions=self.instructions,
-                reasoning={"effort": self.reasoning_effort, "summary": "detailed"},
-                input=str(self.conversation),
-                text_format=MinionOutput,
+                messages=messages,
+                response_format=MinionOutput,
+                reasoning_effort=self.reasoning_effort,
             )
             self.raw_model_responses.append(response)
 
-            output = response.output_parsed
+            output = MinionOutput.model_validate_json(response.choices[0].message.content)
             print(output, end="\n\n")
             self._add_to_conversation(message=output)
 

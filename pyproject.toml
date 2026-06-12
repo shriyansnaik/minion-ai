@@ -9,7 +9,6 @@ description = "A simple agentic framework with observability and evals baked in"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "openai",
     "pydantic",
     "docstring-parser",
     "litellm",
