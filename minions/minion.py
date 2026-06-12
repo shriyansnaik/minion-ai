@@ -1,0 +1,204 @@
+import inspect
+import docstring_parser
+from typing import Callable, Literal
+
+from .models import Tool, ToolArg, ToolCall, MinionOutput
+from .client import get_client
+
+MINION_BASE_PROMPT = """#Role
+You are Minion, a powerful AI agent. Given user input, produce the best possible output using your available tools.
+
+====================================================
+# Tools You Have
+
+{tool_schemas}
+====================================================
+
+## Sub Minions (Delegating huge tasks)
+If the above tools include `_spawn_sub_minion`, use it to delegate large tasks.
+
+**Trigger rules (apply these before starting work):**
+- Task involves reading or processing **3+ independent files/URLs/items** → delegate to sub minions
+- Split items evenly: e.g. 12 files → 3 sub minions × 4 files each
+- Each sub minion gets: the same instructions + its specific subset of items
+- You synthesize their results; you do NOT read the files yourself
+
+Only skip delegation if items are fewer than 3, or one item's output feeds another.
+
+## Thoughts
+Keep thoughts concise — enough for the human to follow your reasoning. Do not name tools directly; describe your intent instead.
+
+## Tool Arguments
+All tool args must be valid JSON. Escape double quotes where needed.
+
+## Multiple Tools
+Call independent tools simultaneously; only sequence tools when one depends on another's output.
+
+## Output Format
+Every response must include `next_thought` and `next_tools`.
+When you have sufficient information to answer, call `_finish` with your answer in `final_response`."""
+
+
+class Minion:
+
+    def __init__(
+        self,
+        model: str,
+        reasoning_effort: str = None,
+        secondary_model: str = None,
+        secondary_model_reasoning_effort: str = None,
+        system_prompt: str = None,
+        tools: list | None = [],
+        allow_sub_agents: bool = False,
+        max_turns: int = 10,
+    ):
+        self.model = model
+        self.reasoning_effort = reasoning_effort
+        self.secondary_model = secondary_model
+        self.secondary_model_reasoning_effort = secondary_model_reasoning_effort
+        self.system_prompt = system_prompt
+        self.tools = tools
+        self.parsed_tools = [self._parse_tool(tool) for tool in tools]
+        self.allow_sub_agents = allow_sub_agents
+        self.max_turns = max_turns
+
+        self.raw_model_responses = []
+
+        if allow_sub_agents:
+            if not secondary_model:
+                print("No secondary model setup, sub agents will use the main model")
+                self.secondary_model = model
+            if not secondary_model_reasoning_effort:
+                print("No secondary model reasoning settings found, sub agents will use the main models reasoning settings")
+                self.secondary_model_reasoning_effort = reasoning_effort
+            self.parsed_tools.append(self._parse_tool(self._spawn_sub_minion))
+
+        self.parsed_tools.append(self._parse_tool(self._finish))
+
+        self.conversation = []
+        self.instructions = None
+
+    def _parse_tool(self, fn: Callable) -> Tool:
+        sig = inspect.signature(fn)
+        parsed_doc = docstring_parser.parse(inspect.getdoc(fn) or "")
+        param_descriptions = {p.arg_name: p.description for p in parsed_doc.params}
+
+        parameters = {}
+        for name, param in sig.parameters.items():
+            annotation = param.annotation
+            parameters[name] = {
+                "type": annotation.__name__ if annotation != inspect.Parameter.empty else "string",
+                "description": param_descriptions.get(name, "")
+            }
+
+        return Tool(
+            schema={
+                "tool_name": fn.__name__,
+                "description": parsed_doc.short_description or "",
+                "parameters": parameters,
+            },
+            fn=fn,
+        )
+
+    def _finish(self, final_response: str) -> str:
+        """Call this when you have completed the user's request.
+
+        Args:
+            final_response: The message shown directly to the user. Must be phrased as a direct answer or summary of the completed request.
+
+        Returns:
+            The final_response string, passed through unchanged.
+        """
+        return final_response
+
+    def _spawn_sub_minion(self, input: str, tool_list: list[str] = []) -> str:
+        """Spawn an independent sub-minion to complete a task and return its answer.
+
+        Use when a task is large, separable into parallel subtasks, or requires reading many files (eg. spawn 25 sub-minions each reading 4 files rather than reading 100 yourself — too much information can confuse you if read all at once).
+
+        The sub-minion has no conversation memory, so `input` must be fully self-contained: include all context, constraints, and instructions needed to complete the task from scratch.
+
+        Args:
+            input: Self-contained task description with all required context.
+            tool_list: Restrict to specific tools by passing the names to prevent sub minion to go rogue. If tool_list is not passed, sub minion will have all tools.
+
+        Returns:
+            The sub-minion's final answer.
+        """
+        if not tool_list:
+            tools = self.tools
+        else:
+            tools = [tool.fn for tool in self.parsed_tools if tool.schema["tool_name"] in tool_list]
+
+        sub_minion = Minion(
+            model=self.secondary_model,
+            reasoning_effort=self.secondary_model_reasoning_effort,
+            tools=tools,
+            allow_sub_agents=False,
+        )
+        print("=== CREATED A SUB MINION. RUNNING IT NOW ===")
+        sub_output = sub_minion(input)
+        print("=== SUB MINION HAS ENDED ===")
+        return sub_output
+
+    def _add_to_conversation(
+        self,
+        message: MinionOutput | str,
+        message_type: Literal["system", "user", "thought", "tool", "tool_output"] = None,
+    ):
+        if isinstance(message, MinionOutput):
+            self.conversation.append({"message_type": "thought", "content": message.next_thought})
+
+            for tool in message.next_tools:
+                args = ", ".join(f"{a.key}={a.value!r}" for a in tool.args)
+                self.conversation.append({
+                    "message_type": "tool",
+                    "content": f"Tool('{tool.tool_name}' called with Args({args}))",
+                })
+        else:
+            self.conversation.append({
+                "message_type": message_type or "tool_output",
+                "content": message,
+            })
+
+    def invoke_tool(self, tool_name: str, args: dict) -> str:
+        matches = [t for t in self.parsed_tools if t.schema["tool_name"] == tool_name]
+        if not matches:
+            raise ValueError(f"Tool '{tool_name}' not found")
+        return matches[0].fn(**args)
+
+    def __call__(self, input: str) -> str:
+        self._add_to_conversation(message=input, message_type="user")
+
+        tool_schemas = "\n".join([str(tool.schema) for tool in self.parsed_tools])
+        self.instructions = MINION_BASE_PROMPT.format(tool_schemas=tool_schemas)
+        if self.system_prompt:
+            self.instructions += f"\n\n## Special Instructions from User\n{self.system_prompt}"
+
+        client = get_client()
+
+        for _ in range(self.max_turns):
+            response = client.responses.parse(
+                model=self.model,
+                instructions=self.instructions,
+                reasoning={"effort": self.reasoning_effort, "summary": "detailed"},
+                input=str(self.conversation),
+                text_format=MinionOutput,
+            )
+            self.raw_model_responses.append(response)
+
+            output = response.output_parsed
+            print(output, end="\n\n")
+            self._add_to_conversation(message=output)
+
+            for tool in output.next_tools:
+                tool_output = self.invoke_tool(
+                    tool_name=tool.tool_name,
+                    args={a.key: a.value for a in tool.args},
+                )
+                self._add_to_conversation(message=tool_output)
+
+                if tool.tool_name == "_finish":
+                    return tool_output
+
+        print(f"OOPS!! {self.max_turns} turns were not enough")

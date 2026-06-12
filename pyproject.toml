@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minion-ai"
+version = "0.1.0"
+description = "A simple agentic framework with observability and evals baked in"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai",
+    "pydantic",
+    "docstring-parser",
+    "litellm",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["minions"]
+
+[project.urls]
+Repository = "https://github.com/shriyansnaik/minions"
+
