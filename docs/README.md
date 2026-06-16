@@ -25,5 +25,6 @@ The dashboard server can store traces in:
 - **[quickstart-mac.md](quickstart-mac.md)** — start-to-finish on a Mac (Apple Silicon): Postgres dashboard in Docker + a traced agent. Easiest way to see the whole thing working.
 - **[hosting.md](hosting.md)** — run the dashboard server (Docker or bare uvicorn; SQLite or Postgres).
 - **[remote-tracing.md](remote-tracing.md)** — point your agent at a local file or a remote server, and create API tokens.
-- **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* build and push the `minion-ui` image to a registry.
-- **[publishing-to-pypi.md](publishing-to-pypi.md)** — *(maintainers)* publish the `minion-ai` package to PyPI via GitHub Actions.
+- **[releasing.md](releasing.md)** — *(maintainers)* cut a release: one tag publishes to PyPI **and** Docker Hub, plus when to bump which version.
+- **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* details of the `minion-ui` image build/registry.
+- **[publishing-to-pypi.md](publishing-to-pypi.md)** — *(maintainers)* details of the PyPI trusted-publishing setup.
