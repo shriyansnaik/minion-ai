@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "minion-ai"
-version = "0.1.1"
+version = "0.1.2"
 description = "A simple agentic framework with observability and evals baked in"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,11 +12,24 @@ dependencies = [
     "pydantic",
     "docstring-parser",
     "litellm",
+    "sqlalchemy>=2.0",
+    "alembic",
+    "httpx",
 ]
+
+[project.optional-dependencies]
+ui = [
+    "fastapi",
+    "uvicorn[standard]",
+    "psycopg[binary]",
+]
+
+[project.scripts]
+minion = "minions.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["minions"]
+artifacts = ["minions/model_prices.json", "minions/server/ui/dist/**"]
 
 [project.urls]
 Repository = "https://github.com/shriyansnaik/minion-ai"
-

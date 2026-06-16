@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+ui/node_modules
+node_modules
+*.db
+*.db-wal
+*.db-shm
+.minion
+*.egg-info
+.pytest_cache

@@ -1,0 +1,12 @@
+services:
+  minion-ui:
+    build: .
+    ports:
+      - "7337:7337"
+    volumes:
+      - minion_data:/root/.minion
+    environment:
+      - MINION_DB_PATH=/root/.minion/traces.db   # optional override
+
+volumes:
+  minion_data:

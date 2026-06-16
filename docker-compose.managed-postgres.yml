@@ -1,0 +1,8 @@
+services:
+  minion-ui:
+    build: .
+    ports:
+      - "7337:7337"
+    environment:
+      # Point at any managed Postgres (RDS, Supabase, Neon, etc.).
+      - DATABASE_URL=postgresql://user:pass@mydb.us-east-1.rds.amazonaws.com:5432/minion

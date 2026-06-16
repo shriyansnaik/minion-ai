@@ -1,4 +1,6 @@
 import inspect
+import json
+import time
 import litellm
 import docstring_parser
 from typing import Callable, Literal
@@ -53,6 +55,8 @@ class Minion:
         tools: list | None = [],
         allow_sub_agents: bool = False,
         max_turns: int = 10,
+        project: str = None,
+        _parent_trace_id: str = None,
     ):
         self.model = model
         self.reasoning_effort = reasoning_effort
@@ -63,6 +67,9 @@ class Minion:
         self.parsed_tools = [self._parse_tool(tool) for tool in tools]
         self.allow_sub_agents = allow_sub_agents
         self.max_turns = max_turns
+        self.project = project
+        self._parent_trace_id = _parent_trace_id
+        self._current_trace_id = None
 
         self.raw_model_responses = []
 
@@ -137,6 +144,7 @@ class Minion:
             reasoning_effort=self.secondary_model_reasoning_effort,
             tools=tools,
             allow_sub_agents=False,
+            _parent_trace_id=self._current_trace_id,
         )
         print("=== CREATED A SUB MINION. RUNNING IT NOW ===")
         sub_output = sub_minion(input)
@@ -163,13 +171,60 @@ class Minion:
                 "content": message,
             })
 
+    @staticmethod
+    def _coerce_arg(value, type_name: str):
+        """Tool args arrive as strings (ToolArg.value is str). Coerce them to the
+        type declared on the tool's signature; pass the raw string through if it
+        can't be parsed so a malformed value degrades instead of crashing."""
+        if not isinstance(value, str):  # already structured — leave it
+            return value
+        try:
+            if type_name == "int":
+                return int(value)
+            if type_name == "float":
+                return float(value)
+            if type_name == "bool":
+                return value.strip().lower() not in ("false", "0", "", "none", "null")
+            if type_name in ("list", "dict"):
+                return json.loads(value)
+        except (ValueError, TypeError):
+            return value
+        return value
+
     def invoke_tool(self, tool_name: str, args: dict) -> str:
         matches = [t for t in self.parsed_tools if t.schema["tool_name"] == tool_name]
         if not matches:
             raise ValueError(f"Tool '{tool_name}' not found")
-        return matches[0].fn(**args)
+        tool = matches[0]
+        coerced = {
+            k: self._coerce_arg(v, tool.schema["parameters"].get(k, {}).get("type", "string"))
+            for k, v in args.items()
+        }
+        return tool.fn(**coerced)
 
-    def __call__(self, input: str) -> str:
+    def __call__(self, input: str, tags: list = None, metadata: dict = None) -> str:
+        from . import trace_db
+        from .config import get_config
+
+        cfg = get_config()
+        trace_id = None
+        if cfg.tracing:
+            project_id = None
+            project_name = self.project or cfg.project
+            if project_name:
+                project_id = trace_db.ensure_project(project_name)
+            trace_id = trace_db.create_run(
+                model=self.model,
+                input=input,
+                parent_trace_id=self._parent_trace_id,
+                project_id=project_id,
+                tags=tags,
+                metadata=metadata,
+                system_prompt=self.system_prompt,
+                tools=[t.schema["tool_name"] for t in self.parsed_tools],
+            )
+        self._current_trace_id = trace_id
+
         self._add_to_conversation(message=input, message_type="user")
 
         tool_schemas = "\n".join([str(tool.schema) for tool in self.parsed_tools])
@@ -177,31 +232,82 @@ class Minion:
         if self.system_prompt:
             self.instructions += f"\n\n## Special Instructions from User\n{self.system_prompt}"
 
-        for _ in range(self.max_turns):
-            messages = [
-                {"role": "system", "content": self.instructions},
-                {"role": "user", "content": str(self.conversation)},
-            ]
-            response = litellm.completion(
-                model=self.model,
-                messages=messages,
-                response_format=MinionOutput,
-                reasoning_effort=self.reasoning_effort,
-            )
-            self.raw_model_responses.append(response)
+        run_start = time.monotonic()
+        total_input_tokens = 0
+        total_output_tokens = 0
 
-            output = MinionOutput.model_validate_json(response.choices[0].message.content)
-            print(output, end="\n\n")
-            self._add_to_conversation(message=output)
+        try:
+            for turn_number in range(self.max_turns):
+                messages = [
+                    {"role": "system", "content": self.instructions},
+                    {"role": "user", "content": str(self.conversation)},
+                ]
 
-            for tool in output.next_tools:
-                tool_output = self.invoke_tool(
-                    tool_name=tool.tool_name,
-                    args={a.key: a.value for a in tool.args},
+                turn_start = time.monotonic()
+                response = litellm.completion(
+                    model=self.model,
+                    messages=messages,
+                    response_format=MinionOutput,
+                    reasoning_effort=self.reasoning_effort,
                 )
-                self._add_to_conversation(message=tool_output)
+                turn_latency_ms = int((time.monotonic() - turn_start) * 1000)
+                self.raw_model_responses.append(response)
 
-                if tool.tool_name == "_finish":
-                    return tool_output
+                input_tokens = response.usage.prompt_tokens if response.usage else 0
+                output_tokens = response.usage.completion_tokens if response.usage else 0
+                total_input_tokens += input_tokens
+                total_output_tokens += output_tokens
 
+                output = MinionOutput.model_validate_json(response.choices[0].message.content)
+                print(output, end="\n\n")
+                self._add_to_conversation(message=output)
+
+                turn_tool_calls = []
+                finished = False
+                final_output = None
+
+                for tool in output.next_tools:
+                    tool_start = time.monotonic()
+                    tool_output = self.invoke_tool(
+                        tool_name=tool.tool_name,
+                        args={a.key: a.value for a in tool.args},
+                    )
+                    tool_latency_ms = int((time.monotonic() - tool_start) * 1000)
+
+                    turn_tool_calls.append({
+                        "tool_name": tool.tool_name,
+                        "args": {a.key: a.value for a in tool.args},
+                        "result": str(tool_output),
+                        "latency_ms": tool_latency_ms,
+                    })
+
+                    self._add_to_conversation(message=tool_output)
+
+                    if tool.tool_name == "_finish":
+                        finished = True
+                        final_output = tool_output
+                        break
+
+                if trace_id:
+                    trace_db.append_turn(
+                        trace_id, turn_number, output.next_thought,
+                        input_tokens, output_tokens, turn_latency_ms, turn_tool_calls,
+                    )
+
+                if finished:
+                    if trace_id:
+                        trace_db.finish_run(
+                            trace_id, final_output,
+                            total_input_tokens, total_output_tokens,
+                            int((time.monotonic() - run_start) * 1000),
+                        )
+                    return final_output
+
+        except Exception:
+            if trace_id:
+                trace_db.fail_run(trace_id)
+            raise
+
+        if trace_id:
+            trace_db.fail_run(trace_id)
         print(f"OOPS!! {self.max_turns} turns were not enough")

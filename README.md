@@ -1,6 +1,13 @@
-# Minion AI
+<p align="center">
+  <img src="https://raw.githubusercontent.com/shriyansnaik/minion-ai/main/assets/minions-logo.png" alt="Minions" height="60" />
+</p>
 
-A lightweight, provider-agnostic agentic framework. Build AI agents that think, use tools, and delegate to sub-agents — with observability baked in.
+<p align="center">
+  A lightweight, provider-agnostic agentic framework.<br/>
+  Build AI agents that think, use tools, and delegate to sub-agents — with observability baked in.
+</p>
+
+---
 
 ## Install
 
@@ -63,16 +70,73 @@ result = agent("Summarise every file in the /reports directory")
 
 The agent automatically delegates when it sees 3+ independent items to process.
 
-## Configuration
+## Tracing & UI
+
+Enable tracing to record every run, turn, and tool call to a local SQLite database, then inspect them in the built-in dashboard.
+
+```bash
+pip install "minion-ai[ui]"
+```
 
 ```python
 minions.init(
-    api_key="...",        # optional if env var is set
-    base_url="...",       # custom endpoint (Azure, vLLM, Ollama, etc.)
-    tracing=True,         # enable observability (coming soon)
-    ui_url="http://localhost:7337",
+    api_key="...",
+    tracing=True,
+    project="my-project",   # required when tracing=True
+)
+
+agent = minions.Minion(model="openai/gpt-4o", tools=[...])
+agent("Do something interesting")
+```
+
+Launch the dashboard:
+
+```bash
+minion ui
+```
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/shriyansnaik/minion-ai/main/assets/minions-icon-tile.png" alt="Minions UI" height="80" />
+</p>
+
+The UI groups traces by project, lets you drill into every turn and tool call, and shows token usage and cost estimates in real time.
+
+### Remote tracing (team server)
+
+To send traces to a shared minion-ui server instead of a local file, add `trace_url`
+and a project-scoped token (create one in the dashboard under a project's
+**Settings → API Tokens**):
+
+```python
+minions.init(
+    tracing=True,
+    project="my-project",
+    trace_url="https://traces.mycompany.com",
+    tracing_secret_token="mni_xK9mP2...",
 )
 ```
+
+In this mode nothing is written locally — runs are pushed over HTTP to the server.
+Tracing never raises: if the server is unreachable the push is skipped and your
+agent keeps running.
+
+### Running the server
+
+The dashboard server ships as a container:
+
+```bash
+docker compose up            # SQLite (default), data in a named volume
+```
+
+For a team-scale deployment, point it at Postgres via `DATABASE_URL` (SQLite stays
+the default when it's unset):
+
+```bash
+docker compose -f docker-compose.postgres.yml up          # self-hosted Postgres
+docker compose -f docker-compose.managed-postgres.yml up  # RDS / Supabase / Neon
+```
+
+See **[docs/](docs/)** for full hosting, remote-tracing, and image-publishing guides.
 
 ## Building Tools
 

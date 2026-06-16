@@ -1,0 +1,28 @@
+# Minion AI — Documentation
+
+Minion AI has two pieces:
+
+- **minion-ai** — the agent library your code runs (`pip install minion-ai`).
+- **minion-ui** — a dashboard server that stores and displays traces.
+
+You can run them together on one machine, or run the dashboard as a shared
+server that many agents push to.
+
+## Deployment topologies
+
+| Mode | Where traces go | Setup |
+|---|---|---|
+| **Local** | Local SQLite file on the same machine | [remote-tracing.md › Local](remote-tracing.md#local-mode) |
+| **Distributed** | An agent on machine A pushes to a dashboard on machine B | [hosting.md](hosting.md) + [remote-tracing.md › Remote](remote-tracing.md#remote-mode) |
+
+The dashboard server can store traces in:
+
+- **SQLite** (default — a single file, zero setup)
+- **PostgreSQL** (a container you run, or a managed URL like RDS / Supabase / Neon)
+
+## Guides
+
+- **[quickstart-mac.md](quickstart-mac.md)** — start-to-finish on a Mac (Apple Silicon): Postgres dashboard in Docker + a traced agent. Easiest way to see the whole thing working.
+- **[hosting.md](hosting.md)** — run the dashboard server (Docker or bare uvicorn; SQLite or Postgres).
+- **[remote-tracing.md](remote-tracing.md)** — point your agent at a local file or a remote server, and create API tokens.
+- **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* build and push the `minion-ui` image to a registry.

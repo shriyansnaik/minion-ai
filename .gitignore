@@ -6,3 +6,13 @@ dist/
 *.egg-info/
 test.ipynb
 release.sh
+node_modules
+
+# local trace databases
+*.db
+*.db-wal
+*.db-shm
+
+# internal planning docs (not for the public repo)
+implementation_plan.md
+TODO.md

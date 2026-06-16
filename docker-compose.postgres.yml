@@ -1,0 +1,26 @@
+services:
+  minion-ui:
+    build: .
+    ports:
+      - "7337:7337"
+    environment:
+      - DATABASE_URL=postgresql://minion:secret@db:5432/minion
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=minion
+      - POSTGRES_USER=minion
+      - POSTGRES_PASSWORD=secret
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minion"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  pg_data:
