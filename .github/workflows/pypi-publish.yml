@@ -1,0 +1,55 @@
+# Builds the Python package and publishes it to PyPI via Trusted Publishing
+# (OIDC) — no API token is stored anywhere.
+#
+# One-time setup on PyPI (see docs/publishing-to-pypi.md):
+#   pypi.org -> project minion-ai -> Settings -> Publishing -> add a GitHub
+#   trusted publisher:  owner = shriyansnaik, repo = minion-ai,
+#   workflow = pypi-publish.yml, environment = (leave blank)
+#
+# Triggers:
+#   - Manually from the Actions tab ("Run workflow")
+#   - Pushing a version tag like v0.1.2
+#
+# NOTE: the dashboard UI (minions/server/ui/dist) is gitignored, so this builds
+# it with Node *before* packaging — otherwise the wheel would ship without the UI.
+
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # required for Trusted Publishing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build the dashboard UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build          # emits minions/server/ui/dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the package
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

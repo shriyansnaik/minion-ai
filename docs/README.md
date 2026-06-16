@@ -26,3 +26,4 @@ The dashboard server can store traces in:
 - **[hosting.md](hosting.md)** — run the dashboard server (Docker or bare uvicorn; SQLite or Postgres).
 - **[remote-tracing.md](remote-tracing.md)** — point your agent at a local file or a remote server, and create API tokens.
 - **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* build and push the `minion-ui` image to a registry.
+- **[publishing-to-pypi.md](publishing-to-pypi.md)** — *(maintainers)* publish the `minion-ai` package to PyPI via GitHub Actions.
