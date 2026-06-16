@@ -27,9 +27,13 @@ ui = [
 [project.scripts]
 minion = "minions.cli:main"
 
+# Applies to all build targets (sdist + wheel) so the gitignored UI build and the
+# price table are bundled even though they aren't tracked in git.
+[tool.hatch.build]
+artifacts = ["minions/model_prices.json", "minions/server/ui/dist/**"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["minions"]
-artifacts = ["minions/model_prices.json", "minions/server/ui/dist/**"]
 
 [project.urls]
 Repository = "https://github.com/shriyansnaik/minion-ai"
