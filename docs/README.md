@@ -23,6 +23,7 @@ The dashboard server can store traces in:
 ## Guides
 
 - **[quickstart-mac.md](quickstart-mac.md)** — start-to-finish on a Mac (Apple Silicon): Postgres dashboard in Docker + a traced agent. Easiest way to see the whole thing working.
+- **[multi-agent.md](multi-agent.md)** — build a team of minions: a manager that delegates to named specialists (researcher + writer) and to ad-hoc workers, with the whole tree traced.
 - **[hosting.md](hosting.md)** — run the dashboard server (Docker or bare uvicorn; SQLite or Postgres).
 - **[remote-tracing.md](remote-tracing.md)** — point your agent at a local file or a remote server, and create API tokens.
 - **[releasing.md](releasing.md)** — *(maintainers)* cut a release: one tag publishes to PyPI **and** Docker Hub, plus when to bump which version.

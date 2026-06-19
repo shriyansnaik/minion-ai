@@ -158,23 +158,23 @@ def _build_trace(conn: SAConnection, trace_id: str, custom: dict = None) -> dict
     ).mappings().fetchall()
     run["sub_traces"] = [_build_trace(conn, r["id"], custom) for r in sub_ids]
 
-    # Link each `_spawn_sub_minion` tool call to the sub-trace it produced so the
-    # UI can offer an inline "open trace" jump. Match by the spawn input (the
-    # sub-minion is created with input == the tool call's `input` arg); fall back
-    # to creation order if inputs collide.
+    # Link each sub-minion tool call to the sub-trace it produced so the UI can
+    # offer an inline "open trace" jump. Both the generic `_spawn_sub_minion`
+    # and named specialist sub-minions run the child with input == the tool
+    # call's `input` arg, so match on that. Only the generic spawn can collide
+    # on input (e.g. fan-out with identical inputs), so its creation-order
+    # fallback stays scoped to `_spawn_sub_minion`.
     available = [s for s in run["sub_traces"] if s]
     used: set[str] = set()
     for turn in turn_list:
         for tc in turn.get("tool_calls", []):
-            if tc.get("tool_name") != "_spawn_sub_minion":
-                continue
             args = tc.get("args") if isinstance(tc.get("args"), dict) else {}
             want = args.get("input")
             match = next(
                 (s for s in available if s["id"] not in used and want is not None and s.get("input") == want),
                 None,
             )
-            if match is None:
+            if match is None and tc.get("tool_name") == "_spawn_sub_minion":
                 match = next((s for s in available if s["id"] not in used), None)
             if match is not None:
                 used.add(match["id"])

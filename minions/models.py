@@ -7,6 +7,22 @@ from pydantic import BaseModel
 class Tool:
     fn: Callable
     schema: dict
+    # Child-spawning tools (_spawn_sub_minion, specialist sub-minions) need the
+    # parent's live trace_id injected at call time so the trace tree links up.
+    # It's injected by invoke_tool, never exposed to the model in the schema.
+    needs_parent_trace: bool = False
+
+
+@dataclass
+class RunResult:
+    """Result of one Minion run. `__str__` returns the output so it still
+    prints/logs like the old bare-string return, while `trace_id` hands the
+    caller a handle to the run (e.g. to replay it from a turn later)."""
+    output: str | None
+    trace_id: str | None = None
+
+    def __str__(self) -> str:
+        return self.output if self.output is not None else ""
 
 
 class ToolArg(BaseModel):

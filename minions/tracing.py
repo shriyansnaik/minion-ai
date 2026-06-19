@@ -16,8 +16,7 @@ class RunTracer:
     when tracing is disabled or trace creation fails (trace_id stays None).
     """
 
-    def __init__(self, project: str = None, parent_trace_id: str = None):
-        self.project = project
+    def __init__(self, parent_trace_id: str = None):
         self.parent_trace_id = parent_trace_id
         self.trace_id = None
         self._run_start = None
@@ -40,7 +39,7 @@ class RunTracer:
         cfg = get_config()
         if not cfg.tracing:
             return
-        project_name = self.project or cfg.project
+        project_name = cfg.project
         project_id = trace_db.ensure_project(project_name) if project_name else None
         self.trace_id = trace_db.create_run(
             model=model,
