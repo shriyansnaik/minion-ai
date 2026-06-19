@@ -24,7 +24,7 @@ agent("Do something")
 View them with the bundled local dashboard:
 
 ```bash
-pip install "minion-ai[ui]"
+pip install minion-ai
 minion ui            # opens http://localhost:7337
 ```
 
@@ -48,8 +48,7 @@ minions.init(
 )
 ```
 
-Just installing `minion-ai` is enough for remote push — you do **not** need the
-`[ui]` extra on the agent machine.
+Just installing `minion-ai` is enough for remote push.
 
 ### Getting a token
 

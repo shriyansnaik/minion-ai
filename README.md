@@ -75,7 +75,7 @@ The agent automatically delegates when it sees 3+ independent items to process.
 Enable tracing to record every run, turn, and tool call to a local SQLite database, then inspect them in the built-in dashboard.
 
 ```bash
-pip install "minion-ai[ui]"
+pip install minion-ai
 ```
 
 ```python

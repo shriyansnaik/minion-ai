@@ -13,11 +13,7 @@ def main():
 
 
 def _cmd_ui(args: list[str]):
-    try:
-        import uvicorn
-    except ImportError:
-        print("minion-ai[ui] extras required. Install with: pip install 'minion-ai[ui]'")
-        sys.exit(1)
+    import uvicorn
 
     port = 7337
     db_path = None

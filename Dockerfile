@@ -16,7 +16,7 @@ WORKDIR /app
 COPY . /app
 # Bring in the freshly built dashboard from the UI stage.
 COPY --from=ui /minions/server/ui/dist /app/minions/server/ui/dist
-RUN pip install --no-cache-dir ".[ui]"
+RUN pip install --no-cache-dir "."
 
 # Traces are stored under /root/.minion (the default ~/.minion path for root).
 # Mount a volume here to persist data across container restarts.

@@ -77,7 +77,6 @@ In the dashboard:
 
 ## 4. Install the library
 
-The agent side only needs the base package (no `[ui]` extra):
 ```bash
 pip install minion-ai
 ```

@@ -122,7 +122,7 @@ driver — paste the connection string your provider gives you as-is.
 ## Option D — Without Docker
 
 ```bash
-pip install "minion-ai[ui]"
+pip install minion-ai
 
 # SQLite (default path ~/.minion/traces.db):
 uvicorn minions.server.app:app --host 0.0.0.0 --port 7337
@@ -132,8 +132,8 @@ DATABASE_URL=postgresql://user:pass@host:5432/minion \
   uvicorn minions.server.app:app --host 0.0.0.0 --port 7337
 ```
 
-The `[ui]` extra pulls in FastAPI, uvicorn, and the Postgres driver. (For a quick
-local viewer over a local SQLite file, `minion ui` also works — see
+`minion-ai` ships with FastAPI, uvicorn, and the Postgres driver out of the box.
+(For a quick local viewer over a local SQLite file, `minion ui` also works — see
 [remote-tracing.md](remote-tracing.md#local-mode).)
 
 ---
