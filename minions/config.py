@@ -1,6 +1,9 @@
+import logging
 from dataclasses import dataclass
 from typing import Optional
 import litellm
+
+log = logging.getLogger("minions.config")
 
 
 @dataclass
@@ -13,6 +16,46 @@ class _Config:
 
 
 _config = _Config()
+
+
+def _verify_remote_project(trace_url: str, token: str, project: str) -> None:
+    """Confirm `token` is actually scoped to `project` before any traces are
+    pushed. Without this check the mismatch fails silently: the server
+    rejects every push with a 403, but trace_db only logs a warning for it
+    (so the agent keeps running), so no error ever surfaces and no traces
+    ever appear in the UI."""
+    import httpx
+
+    try:
+        resp = httpx.get(
+            f"{trace_url}/api/ingest/verify",
+            params={"project": project},
+            headers={"X-Minion-Token": token},
+            timeout=5.0,
+        )
+    except httpx.RequestError as e:
+        log.warning("tracing: could not verify project/token against %s (%s) — continuing", trace_url, e)
+        return
+
+    if resp.status_code == 401:
+        raise ValueError(
+            f"trace_url rejected tracing_secret_token: token is invalid or revoked. "
+            f"Create a new token for project '{project}' in the dashboard."
+        )
+    if resp.status_code != 200:
+        log.warning(
+            "tracing: unexpected %s verifying project '%s' against %s — continuing",
+            resp.status_code, project, trace_url,
+        )
+        return
+
+    data = resp.json()
+    if not data.get("match"):
+        raise ValueError(
+            f"Invalid tracing_secret_token for project '{project}': this token is not scoped "
+            f"to that project. Either pass the project name this token was created for, or "
+            f"create a new token for '{project}' in the dashboard."
+        )
 
 
 def init(
@@ -43,6 +86,8 @@ def init(
         raise ValueError("trace_url requires tracing_secret_token")
     if trace_url and not tracing:
         raise ValueError("trace_url requires tracing=True")
+    if trace_url:
+        _verify_remote_project(trace_url, tracing_secret_token, project)
     if api_key:
         litellm.api_key = api_key
     if base_url:

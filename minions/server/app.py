@@ -437,6 +437,16 @@ def _check_project(project_id: str, project_name: str) -> None:
         )
 
 
+@app.get("/api/ingest/verify")
+def verify_project(project: str = Query(...), project_id: str = Depends(require_token)):
+    """Health check used by minions.init() to confirm a token actually matches
+    the project name passed to init(), before any traces are pushed. Doesn't
+    reveal the token's actual project — just whether it matches `project`."""
+    with trace_db.get_engine().connect() as conn:
+        actual = _project_name(conn, project_id)
+    return {"match": actual == project}
+
+
 class IngestRun(BaseModel):
     project: str
     run_id: str

@@ -57,8 +57,12 @@ Just installing `minion-ai` is enough for remote push.
 3. Copy the token immediately — it's shown **once** and only its hash is stored.
 
 The token is scoped to that one project. The `project` you pass to `init()` must
-match the project the token belongs to, or the server rejects the push with a
-**403**.
+match the project the token belongs to. `init()` checks this immediately via a
+health request to `trace_url` — if the token doesn't match, `init()` raises a
+`ValueError` instead of letting every subsequent push fail silently. The error
+does not reveal which project the token actually belongs to (a leaked token
+shouldn't double as a way to discover project names) — it just tells you the
+token and the `project` you passed don't match.
 
 ### Reliability
 
@@ -86,7 +90,8 @@ require `tracing=True` with a `project`.
 
 | Symptom | Cause |
 |---|---|
-| `403` in logs | The `project` in `init()` doesn't match the token's project |
-| `401` in logs | Token is wrong, revoked, or missing |
-| Connection / timeout warning | The `trace_url` server is unreachable (agent still runs) |
-| `ValueError` on startup | `trace_url`/token set without the other, or without `tracing`/`project` |
+| `ValueError` on startup: "this token is not scoped to that project" | The `project` in `init()` doesn't match the token's project — double check `project`, or create a new token for it in the dashboard |
+| `ValueError` on startup: "token is invalid or revoked" | Token is wrong, revoked, or missing |
+| `ValueError` on startup (other) | `trace_url`/token set without the other, or without `tracing`/`project` |
+| Connection / timeout warning at startup | Couldn't reach `trace_url` to verify the token; `init()` continues, agent still runs |
+| `403` in logs during a run | Should not happen if `init()` succeeded — the project/token pair is verified at startup |
