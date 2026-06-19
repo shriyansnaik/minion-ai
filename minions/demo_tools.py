@@ -13,18 +13,21 @@ def read_file(file_path: str, encoding: str = "utf-8") -> str:
             Defaults to 'utf-8'.
 
     Returns:
-        The full contents of the file as a string.
-
-    Raises:
-        FileNotFoundError: If the file does not exist at the given path.
-        PermissionError: If the process lacks read access to the file.
-        UnicodeDecodeError: If the file cannot be decoded with the given encoding.
+        The full contents of the file as a string, or an error message
+        string if the file can't be found, read, or decoded.
     """
-    with open(file_path, "r", encoding=encoding) as f:
-        return f.read()
+    try:
+        with open(file_path, "r", encoding=encoding) as f:
+            return f.read()
+    except FileNotFoundError:
+        return f"File not found: {file_path}"
+    except PermissionError:
+        return f"Permission denied: {file_path}"
+    except UnicodeDecodeError:
+        return f"Could not decode file with encoding '{encoding}': {file_path}"
 
 
-def list_files(directory: str) -> list[str]:
+def list_files(directory: str) -> list[str] | str:
     """Lists all file paths within a directory, excluding hidden and private entries.
 
     Skips files and directories whose names start with '.' or '_'.
@@ -33,16 +36,13 @@ def list_files(directory: str) -> list[str]:
         directory: Path to the directory to list files from.
 
     Returns:
-        A list of absolute file paths found in the directory.
-
-    Raises:
-        FileNotFoundError: If the directory does not exist.
-        NotADirectoryError: If the given path is not a directory.
+        A list of absolute file paths found in the directory, or an error
+        message string if the directory doesn't exist or isn't a directory.
     """
     if not os.path.exists(directory):
-        raise FileNotFoundError(f"Directory not found: {directory}")
+        return f"Directory not found: {directory}"
     if not os.path.isdir(directory):
-        raise NotADirectoryError(f"Path is not a directory: {directory}")
+        return f"Path is not a directory: {directory}"
 
     return [
         os.path.join(directory, entry)
