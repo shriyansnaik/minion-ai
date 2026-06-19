@@ -15,19 +15,7 @@ You are Minion, a powerful AI agent. Given user input, produce the best possible
 # Tools You Have
 
 {tool_schemas}
-====================================================
-
-## Sub Minions (Delegating huge tasks)
-If the above tools include `_spawn_sub_minion`, use it to delegate large tasks.
-
-**Trigger rules (apply these before starting work):**
-- Task involves reading or processing **3+ independent files/URLs/items** → delegate to sub minions
-- Split items evenly: e.g. 12 files → 3 sub minions x 4 files each
-- Each sub minion gets: the same instructions + its specific subset of items
-- You synthesize their results; you do NOT read the files yourself
-
-Only skip delegation if items are fewer than 3, or one item's output feeds another.
-{specialist_section}
+===================================================={spawn_section}{specialist_section}
 ## Thoughts
 Keep thoughts concise — enough for the human to follow your reasoning. Do not name tools directly; describe your intent instead. Talk in language like, "Let me now do xyz...", "I will now ...", "Next let me...", etc.
 
@@ -40,6 +28,20 @@ Call independent tools simultaneously; only sequence tools when one depends on a
 ## Output Format
 Every response must include `next_thought` and `next_tools`.
 When you have sufficient information to answer, call `_finish` with your answer in `final_response`."""
+
+
+SPAWN_SECTION = """
+## Sub Minions (Delegating huge tasks)
+Use `_spawn_sub_minion` to delegate large tasks.
+
+**Trigger rules (apply these before starting work):**
+- Task involves reading or processing **3+ independent files/URLs/items** → delegate to sub minions
+- Split items evenly: e.g. 12 files → 3 sub minions x 4 files each
+- Each sub minion gets: the same instructions + its specific subset of items
+- You synthesize their results; you do NOT read the files yourself
+
+Only skip delegation if items are fewer than 3, or one item's output feeds another.
+"""
 
 
 class _Run:
@@ -292,8 +294,11 @@ class Minion:
         else:
             specialist_section = ""
 
+        spawn_section = SPAWN_SECTION if self.allow_sub_agents else ""
+
         instructions = MINION_BASE_PROMPT.format(
             tool_schemas=tool_schemas,
+            spawn_section=spawn_section,
             specialist_section=specialist_section,
         )
         if self.system_prompt:
