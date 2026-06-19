@@ -454,6 +454,7 @@ class IngestRun(BaseModel):
 class IngestRunFinish(BaseModel):
     status: str
     output: Optional[str] = None
+    error: Optional[str] = None
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_latency_ms: int = 0
@@ -491,7 +492,7 @@ def ingest_run(body: IngestRun, project_id: str = Depends(require_token)):
 @app.patch("/api/ingest/runs/{run_id}")
 def ingest_run_finish(run_id: str, body: IngestRunFinish, project_id: str = Depends(require_token)):
     if body.status == "failed":
-        trace_db.fail_run(run_id)
+        trace_db.fail_run(run_id, error=body.error)
     else:
         trace_db.finish_run(
             run_id,

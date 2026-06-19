@@ -1,6 +1,5 @@
 import inspect
 import json
-import time
 import litellm
 import docstring_parser
 from typing import Callable, Literal
@@ -30,7 +29,7 @@ If the above tools include `_spawn_sub_minion`, use it to delegate large tasks.
 Only skip delegation if items are fewer than 3, or one item's output feeds another.
 
 ## Thoughts
-Keep thoughts concise — enough for the human to follow your reasoning. Do not name tools directly; describe your intent instead.
+Keep thoughts concise — enough for the human to follow your reasoning. Do not name tools directly; describe your intent instead. Talk in language like, "Let me now do xyz...", "I will now ...", "Next let me...", etc. 
 
 ## Tool Arguments
 All tool args must be valid JSON. Escape double quotes where needed.
@@ -70,6 +69,7 @@ class Minion:
         self.project = project
         self._parent_trace_id = _parent_trace_id
         self._current_trace_id = None
+        self.tracer = None
 
         self.raw_model_responses = []
 
@@ -146,9 +146,7 @@ class Minion:
             allow_sub_agents=False,
             _parent_trace_id=self._current_trace_id,
         )
-        print("=== CREATED A SUB MINION. RUNNING IT NOW ===")
         sub_output = sub_minion(input)
-        print("=== SUB MINION HAS ENDED ===")
         return sub_output
 
     def _add_to_conversation(
@@ -201,29 +199,18 @@ class Minion:
             for k, v in args.items()
         }
         return tool.fn(**coerced)
+    
+    def _format_conversation(self) -> str:
+          formatted_conversation = str(self.conversation)
+          divider = "\n\n=============================================\n\n"
+          ending = "Above is a series of your previous thoughts, tools and their outputs. Please generate the next_thought and next_tools:"
+
+          return "".join([formatted_conversation, divider, ending])
 
     def __call__(self, input: str, tags: list = None, metadata: dict = None) -> str:
-        from . import trace_db
-        from .config import get_config
+        from .tracing import RunTracer
 
-        cfg = get_config()
-        trace_id = None
-        if cfg.tracing:
-            project_id = None
-            project_name = self.project or cfg.project
-            if project_name:
-                project_id = trace_db.ensure_project(project_name)
-            trace_id = trace_db.create_run(
-                model=self.model,
-                input=input,
-                parent_trace_id=self._parent_trace_id,
-                project_id=project_id,
-                tags=tags,
-                metadata=metadata,
-                system_prompt=self.system_prompt,
-                tools=[t.schema["tool_name"] for t in self.parsed_tools],
-            )
-        self._current_trace_id = trace_id
+        self.tracer = RunTracer(project=self.project, parent_trace_id=self._parent_trace_id)
 
         self._add_to_conversation(message=input, message_type="user")
 
@@ -232,55 +219,44 @@ class Minion:
         if self.system_prompt:
             self.instructions += f"\n\n## Special Instructions from User\n{self.system_prompt}"
 
-        run_start = time.monotonic()
-        total_input_tokens = 0
-        total_output_tokens = 0
+        self.tracer.start(
+            model=self.model,
+            input=input,
+            system_prompt=self.system_prompt,
+            tool_names=[t.schema["tool_name"] for t in self.parsed_tools],
+            tags=tags,
+            metadata=metadata,
+        )
+        self._current_trace_id = self.tracer.trace_id
 
         try:
             for turn_number in range(self.max_turns):
                 messages = [
                     {"role": "system", "content": self.instructions},
-                    {"role": "user", "content": str(self.conversation)},
+                    {"role": "user", "content": self._format_conversation()},
                 ]
 
-                turn_start = time.monotonic()
-                response = litellm.completion(
-                    model=self.model,
-                    messages=messages,
-                    response_format=MinionOutput,
-                    reasoning_effort=self.reasoning_effort,
-                )
-                turn_latency_ms = int((time.monotonic() - turn_start) * 1000)
+                with self.tracer.time_turn():
+                    response = litellm.completion(
+                        model=self.model,
+                        messages=messages,
+                        response_format=MinionOutput,
+                        reasoning_effort=self.reasoning_effort,
+                    )
                 self.raw_model_responses.append(response)
-
-                input_tokens = response.usage.prompt_tokens if response.usage else 0
-                output_tokens = response.usage.completion_tokens if response.usage else 0
-                total_input_tokens += input_tokens
-                total_output_tokens += output_tokens
 
                 output = MinionOutput.model_validate_json(response.choices[0].message.content)
                 print(output, end="\n\n")
                 self._add_to_conversation(message=output)
 
-                turn_tool_calls = []
                 finished = False
                 final_output = None
 
                 for tool in output.next_tools:
-                    tool_start = time.monotonic()
-                    tool_output = self.invoke_tool(
-                        tool_name=tool.tool_name,
-                        args={a.key: a.value for a in tool.args},
-                    )
-                    tool_latency_ms = int((time.monotonic() - tool_start) * 1000)
-
-                    turn_tool_calls.append({
-                        "tool_name": tool.tool_name,
-                        "args": {a.key: a.value for a in tool.args},
-                        "result": str(tool_output),
-                        "latency_ms": tool_latency_ms,
-                    })
-
+                    args = {a.key: a.value for a in tool.args}
+                    with self.tracer.time_tool():
+                        tool_output = self.invoke_tool(tool_name=tool.tool_name, args=args)
+                    self.tracer.record_tool_call(tool.tool_name, args, tool_output)
                     self._add_to_conversation(message=tool_output)
 
                     if tool.tool_name == "_finish":
@@ -288,26 +264,15 @@ class Minion:
                         final_output = tool_output
                         break
 
-                if trace_id:
-                    trace_db.append_turn(
-                        trace_id, turn_number, output.next_thought,
-                        input_tokens, output_tokens, turn_latency_ms, turn_tool_calls,
-                    )
+                self.tracer.record_turn(turn_number, output.next_thought, response.usage)
 
                 if finished:
-                    if trace_id:
-                        trace_db.finish_run(
-                            trace_id, final_output,
-                            total_input_tokens, total_output_tokens,
-                            int((time.monotonic() - run_start) * 1000),
-                        )
+                    self.tracer.finish(final_output)
                     return final_output
 
-        except Exception:
-            if trace_id:
-                trace_db.fail_run(trace_id)
+        except Exception as e:
+            self.tracer.fail(e)
             raise
 
-        if trace_id:
-            trace_db.fail_run(trace_id)
+        self.tracer.fail(f"Exceeded max_turns ({self.max_turns}) without calling _finish.")
         print(f"OOPS!! {self.max_turns} turns were not enough")

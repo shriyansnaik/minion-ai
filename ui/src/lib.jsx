@@ -96,6 +96,7 @@ export const Icon = {
   bolt: p => <Svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></Svg>,
   layers: p => <Svg {...p}><path d="m12 2 9 5-9 5-9-5z" /><path d="m3 12 9 5 9-5M3 17l9 5 9-5" /></Svg>,
   plus: p => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>,
+  alert: p => <Svg {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></Svg>,
 }
 
 // Pick a tool icon by name heuristics.

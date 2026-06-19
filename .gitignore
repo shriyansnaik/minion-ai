@@ -16,3 +16,5 @@ node_modules
 # internal planning docs (not for the public repo)
 implementation_plan.md
 TODO.md
+
+.vercel

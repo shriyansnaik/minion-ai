@@ -311,12 +311,12 @@ def finish_run(
         log.warning("tracing: failed to finish run — %s", e)
 
 
-def fail_run(trace_id: str) -> None:
+def fail_run(trace_id: str, error: str = None) -> None:
     remote = _remote()
     if remote:
         client, _ = remote
         try:
-            client.patch(f"/api/ingest/runs/{trace_id}", json={"status": "failed"})
+            client.patch(f"/api/ingest/runs/{trace_id}", json={"status": "failed", "error": error})
         except Exception as e:
             log.warning("tracing: remote fail_run failed — %s", e)
         return
@@ -324,8 +324,8 @@ def fail_run(trace_id: str) -> None:
     try:
         with get_engine().begin() as conn:
             conn.execute(
-                text("UPDATE runs SET status='failed', finished_at=:finished_at WHERE id=:id"),
-                {"finished_at": _now(), "id": trace_id},
+                text("UPDATE runs SET status='failed', finished_at=:finished_at, error=:error WHERE id=:id"),
+                {"finished_at": _now(), "error": error, "id": trace_id},
             )
     except Exception as e:
         log.warning("tracing: failed to mark run as failed — %s", e)

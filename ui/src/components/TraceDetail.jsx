@@ -315,6 +315,17 @@ export default function TraceDetail({ traceId, onSelect }) {
           </div>
         )}
 
+        {trace.status === 'failed' && trace.error && (
+          <Section icon={Icon.alert} title="Error" accent="var(--red)" collapsible defaultOpen={trace.error.length < 600}>
+            <pre className="mono" style={{
+              padding: '14px 16px', background: 'var(--bg-error)',
+              color: 'var(--red)', fontSize: 12.5, lineHeight: 1.6,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              maxHeight: 420, overflowY: 'auto', margin: 0,
+            }}>{trace.error}</pre>
+          </Section>
+        )}
+
         {trace.output && (
           <Section icon={Icon.check} title="Output" accent="var(--green)">
             <div style={{
