@@ -108,6 +108,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _stringify_metadata(metadata: dict | None) -> dict:
+    """Normalize every metadata value to a string before storage, so exact
+    key=value filtering never has to guess a type back out of a query string
+    (lossy for things like zero-padded ids). None drops the key (treated as
+    "not set"); dicts/lists are JSON-encoded so they round-trip as text."""
+    out = {}
+    for k, v in (metadata or {}).items():
+        if v is None:
+            continue
+        if isinstance(v, str):
+            out[str(k)] = v
+        elif isinstance(v, (dict, list)):
+            out[str(k)] = json.dumps(v)
+        else:
+            out[str(k)] = str(v)
+    return out
+
+
 def ensure_project(name: str) -> str | None:
     # In remote mode the server owns projects (resolved via the token); the
     # client never needs a local project id.
@@ -169,13 +187,17 @@ def create_run(
     _ensure_init()
     try:
         with get_engine().begin() as conn:
+            # ::jsonb is invalid SQLite syntax, and an implicit text->jsonb
+            # assignment cast in a parameterized INSERT isn't safe to assume
+            # across drivers, so the cast is applied explicitly per dialect.
+            metadata_expr = ":metadata::jsonb" if conn.dialect.name == "postgresql" else ":metadata"
             conn.execute(
                 text(
                     "INSERT INTO runs"
                     " (id, created_at, model, status, system_prompt, input,"
                     "  parent_trace_id, project_id, tags, metadata, tools)"
                     " VALUES (:id, :created_at, :model, 'running', :system_prompt, :input,"
-                    "  :parent_trace_id, :project_id, :tags, :metadata, :tools)"
+                    "  :parent_trace_id, :project_id, :tags, " + metadata_expr + ", :tools)"
                 ),
                 {
                     "id": trace_id,
@@ -186,7 +208,7 @@ def create_run(
                     "parent_trace_id": parent_trace_id,
                     "project_id": project_id,
                     "tags": json.dumps(tags or []),
-                    "metadata": json.dumps(metadata or {}),
+                    "metadata": json.dumps(_stringify_metadata(metadata)),
                     "tools": json.dumps(tools or []),
                 },
             )

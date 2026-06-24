@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { statusColor, fmtCost, fmtMs, fmtRelative, fmtCompact, shortModel, Icon } from '../lib'
+import FilterPopover from './FilterPopover'
+import BatchDeleteModal from './BatchDeleteModal'
 
-function RunRow({ run, selected, onSelect, onDelete }) {
+function RunRow({ run, selected, onSelect, onDelete, checked, onToggleCheck }) {
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -26,6 +28,7 @@ function RunRow({ run, selected, onSelect, onDelete }) {
   }
 
   const showDots = hovered || menuOpen
+  const showCheckbox = hovered || checked || menuOpen
   const meta = [
     shortModel(run.model),
     fmtRelative(run.created_at),
@@ -49,11 +52,19 @@ function RunRow({ run, selected, onSelect, onDelete }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-        <span style={{
-          width: 7, height: 7, borderRadius: '50%', background: color,
-          flexShrink: 0, marginTop: 5,
-          ...(run.status === 'running' ? {} : {}),
-        }} className={run.status === 'running' ? 'live-dot' : ''} />
+        <span style={{ width: 14, flexShrink: 0, marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {showCheckbox ? (
+            <input
+              type="checkbox" checked={checked}
+              onClick={e => e.stopPropagation()}
+              onChange={e => onToggleCheck(run.id, e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+          ) : (
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }}
+              className={run.status === 'running' ? 'live-dot' : ''} />
+          )}
+        </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
             fontSize: 13, color: 'var(--text)', fontWeight: 500, lineHeight: 1.45,
@@ -122,14 +133,68 @@ function RunRow({ run, selected, onSelect, onDelete }) {
   )
 }
 
-export default function RunList({ runs, loading, filters, onFilter, selectedId, onSelect, onDelete }) {
+function pageWindow(current, max, span = 2) {
+  const start = Math.max(1, current - span)
+  const end = Math.min(max, current + span)
+  const pages = []
+  for (let p = start; p <= end; p++) pages.push(p)
+  return pages
+}
+
+const pageBtnStyle = active => ({
+  minWidth: 24, height: 24, padding: '0 5px', borderRadius: 6, cursor: 'pointer',
+  border: `1px solid ${active ? 'transparent' : 'var(--border)'}`,
+  background: active ? 'var(--accent)' : 'transparent',
+  color: active ? '#fff' : 'var(--text-dim)',
+  fontSize: 11.5, fontWeight: active ? 600 : 500, fontFamily: 'inherit',
+})
+
+export default function RunList({
+  runs, loading, filters, onFilter, selectedId, onSelect, onDelete,
+  projectId, pageSize, currentPage, furthestKnownPage, hasNextPage, totalCount,
+  onPageChange, onBulkDeleted,
+}) {
   const [searchInput, setSearchInput] = useState(filters.search)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false)
   const statuses = ['', 'running', 'completed', 'failed']
   const labels = { '': 'All', running: 'Running', completed: 'Completed', failed: 'Failed' }
+
+  // The current page's selection only makes sense for the page/filter it was
+  // made on — not across the 3s poll, which keeps currentPage/filters stable.
+  useEffect(() => { setSelectedIds(new Set()) }, [currentPage, filters])
 
   function handleSearch(e) {
     if (e.key === 'Enter') onFilter(f => ({ ...f, search: searchInput }))
   }
+
+  function toggleSort() {
+    onFilter(f => ({ ...f, sort: f.sort === 'asc' ? 'desc' : 'asc' }))
+  }
+
+  function toggleCheck(id, isChecked) {
+    setSelectedIds(s => {
+      const next = new Set(s)
+      if (isChecked) next.add(id); else next.delete(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllOnPage(e) {
+    setSelectedIds(e.target.checked ? new Set(runs.map(r => r.id)) : new Set())
+  }
+
+  function handleRowDelete(id) {
+    onDelete(id)
+    setSelectedIds(s => {
+      if (!s.has(id)) return s
+      const next = new Set(s); next.delete(id); return next
+    })
+  }
+
+  const allOnPageSelected = runs.length > 0 && runs.every(r => selectedIds.has(r.id))
+  const totalPages = totalCount != null ? Math.max(1, Math.ceil(totalCount / pageSize)) : null
+  const visiblePages = pageWindow(currentPage, furthestKnownPage)
 
   return (
     <div style={{
@@ -157,7 +222,7 @@ export default function RunList({ runs, loading, filters, onFilter, selectedId, 
             }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 5 }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {statuses.map(s => {
             const active = filters.status === s
             return (
@@ -170,8 +235,38 @@ export default function RunList({ runs, loading, filters, onFilter, selectedId, 
               }}>{labels[s]}</button>
             )
           })}
+          <div style={{ flex: 1 }} />
+          <FilterPopover filters={filters} onApply={onFilter} projectId={projectId} />
+          <button onClick={toggleSort} title={filters.sort === 'desc' ? 'Newest first' : 'Oldest first'} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 26, height: 26, borderRadius: 7, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+          }}>
+            <Icon.chevron size={13} style={{ transform: filters.sort === 'asc' ? 'rotate(180deg)' : 'none' }} />
+          </button>
         </div>
       </div>
+
+      {runs.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 16px', borderBottom: '1px solid var(--border)',
+          fontSize: 11.5, color: 'var(--text-muted)', flexShrink: 0,
+        }}>
+          <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} style={{ cursor: 'pointer' }} />
+          <span>Select all on page</span>
+          {selectedIds.size > 0 && (
+            <>
+              <div style={{ flex: 1 }} />
+              <span style={{ color: 'var(--accent-text)', fontWeight: 600 }}>{selectedIds.size} selected</span>
+              <button onClick={() => setShowBatchDeleteModal(true)} style={{
+                fontSize: 11, padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+                border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)', fontWeight: 600,
+              }}>Delete</button>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading && runs.length === 0 && (
@@ -187,10 +282,44 @@ export default function RunList({ runs, loading, filters, onFilter, selectedId, 
         )}
         {runs.map(r => (
           <div key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-            <RunRow run={r} selected={r.id === selectedId} onSelect={onSelect} onDelete={onDelete} />
+            <RunRow
+              run={r} selected={r.id === selectedId} onSelect={onSelect} onDelete={handleRowDelete}
+              checked={selectedIds.has(r.id)} onToggleCheck={toggleCheck}
+            />
           </div>
         ))}
       </div>
+
+      {totalCount != null && totalCount > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          padding: '8px 10px', borderTop: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <button disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} style={pageBtnStyle(false)}>‹</button>
+          {visiblePages.map(p => (
+            <button key={p} onClick={() => onPageChange(p)} style={pageBtnStyle(p === currentPage)}>{p}</button>
+          ))}
+          <button disabled={!hasNextPage && currentPage >= furthestKnownPage} onClick={() => onPageChange(currentPage + 1)} style={pageBtnStyle(false)}>›</button>
+          <span className="tnum" style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>
+            Page {currentPage} of ~{totalPages}
+          </span>
+        </div>
+      )}
+
+      {showBatchDeleteModal && (
+        <BatchDeleteModal
+          selectedIds={selectedIds}
+          filters={filters}
+          projectId={projectId}
+          filterCount={totalCount}
+          onClose={() => setShowBatchDeleteModal(false)}
+          onDeleted={() => {
+            setSelectedIds(new Set())
+            setShowBatchDeleteModal(false)
+            onBulkDeleted()
+          }}
+        />
+      )}
     </div>
   )
 }

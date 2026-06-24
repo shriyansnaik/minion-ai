@@ -1,9 +1,10 @@
+import base64
 import json
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -20,6 +21,9 @@ def _startup():
 
 
 def _parse(row) -> dict:
+    # On Postgres, `metadata` is JSONB and psycopg already deserializes it to
+    # a dict/list; on SQLite it's still TEXT. The isinstance(str) guard is
+    # what makes this function work across both dialects unchanged.
     d = dict(row)
     for field in ("tags", "metadata", "args", "tools"):
         if field in d and isinstance(d[field], str):
@@ -58,6 +62,110 @@ def _with_cost(run: dict, custom: dict = None) -> dict:
     else:
         run["estimated_cost"] = costs.estimate(model, itok, otok)
     return run
+
+
+def _build_trace_filters(
+    dialect_name: str,
+    project_id: Optional[str] = None,
+    status: Optional[str] = None,
+    model: Optional[str] = None,
+    search: Optional[str] = None,
+    metadata_pairs: Optional[list[tuple[str, str]]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+) -> tuple[list[str], dict]:
+    """Shared WHERE-clause builder for list/count/bulk-delete-by-filter, so
+    "what matches the current filter" can never drift between them.
+    metadata_pairs is a list of (key, value) exact-match pairs, ANDed
+    together — chaining multiple metadata filters."""
+    clauses: list[str] = []
+    params: dict = {}
+    if project_id:
+        clauses.append("project_id=:project_id")
+        params["project_id"] = project_id
+    if status:
+        clauses.append("status=:status")
+        params["status"] = status
+    if model:
+        clauses.append("model=:model")
+        params["model"] = model
+    if search:
+        clauses.append("(input LIKE :search1 OR output LIKE :search2)")
+        params["search1"] = params["search2"] = f"%{search}%"
+    # Metadata values are stored as strings (see trace_db._stringify_metadata),
+    # so this is always a plain string comparison on both dialects.
+    pairs = [(k, v) for k, v in (metadata_pairs or []) if k]
+    if pairs:
+        if dialect_name == "postgresql":
+            # A single containment check against a multi-key dict requires
+            # every key to match — one GIN-indexed op covers the whole chain.
+            clauses.append("metadata @> CAST(:metadata_filter AS jsonb)")
+            params["metadata_filter"] = json.dumps(dict(pairs))
+        else:
+            for i, (k, v) in enumerate(pairs):
+                clauses.append(f"json_extract(metadata, :metadata_path{i}) = :metadata_value{i}")
+                params[f"metadata_path{i}"] = f"$.{k}"
+                params[f"metadata_value{i}"] = v
+    if created_after:
+        clauses.append("created_at >= :created_after")
+        params["created_after"] = created_after
+    if created_before:
+        clauses.append("created_at <= :created_before")
+        params["created_before"] = created_before
+    return clauses, params
+
+
+_DELETE_BATCH_SIZE = 500
+
+
+def _chunks(items: list, size: int):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def _cascade_delete_runs(conn: SAConnection, run_ids: list[str]) -> int:
+    """Delete tool_calls, turns, and runs for the given run ids, plus one
+    level of their sub-traces (parent_trace_id matches a given id). IN
+    clauses are chunked to stay under SQLite's bound-parameter ceiling when
+    deleting large id sets (e.g. delete-all-matching-filter). Returns the
+    number of run rows deleted."""
+    if not run_ids:
+        return 0
+    all_ids = list(run_ids)
+    for chunk in _chunks(run_ids, _DELETE_BATCH_SIZE):
+        ph = ",".join(f":id{i}" for i in range(len(chunk)))
+        params = {f"id{i}": v for i, v in enumerate(chunk)}
+        sub_ids = [
+            r["id"] for r in conn.execute(
+                text(f"SELECT id FROM runs WHERE parent_trace_id IN ({ph})"), params
+            ).mappings().fetchall()
+        ]
+        all_ids.extend(sub_ids)
+
+    deleted = 0
+    for chunk in _chunks(all_ids, _DELETE_BATCH_SIZE):
+        ph = ",".join(f":id{i}" for i in range(len(chunk)))
+        params = {f"id{i}": v for i, v in enumerate(chunk)}
+        conn.execute(
+            text(f"DELETE FROM tool_calls WHERE turn_id IN (SELECT id FROM turns WHERE trace_id IN ({ph}))"),
+            params,
+        )
+        conn.execute(text(f"DELETE FROM turns WHERE trace_id IN ({ph})"), params)
+        result = conn.execute(text(f"DELETE FROM runs WHERE id IN ({ph})"), params)
+        deleted += result.rowcount
+    return deleted
+
+
+def _encode_cursor(created_at: str, run_id: str) -> str:
+    return base64.urlsafe_b64encode(json.dumps({"created_at": created_at, "id": run_id}).encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str]:
+    try:
+        data = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        return data["created_at"], data["id"]
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid cursor")
 
 
 class ProjectCreate(BaseModel):
@@ -100,32 +208,71 @@ def list_traces(
     status: Optional[str] = Query(None),
     model: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    metadata_key: list[str] = Query([]),
+    metadata_value: list[str] = Query([]),
+    created_after: Optional[str] = Query(None),
+    created_before: Optional[str] = Query(None),
+    sort: str = Query("desc", pattern="^(asc|desc)$"),
+    cursor: Optional[str] = Query(None),
     limit: int = Query(100, le=500),
-    offset: int = Query(0),
 ):
-    sql = "SELECT * FROM runs WHERE parent_trace_id IS NULL"
-    params: dict = {}
-    if project_id:
-        sql += " AND project_id=:project_id"
-        params["project_id"] = project_id
-    if status:
-        sql += " AND status=:status"
-        params["status"] = status
-    if model:
-        sql += " AND model=:model"
-        params["model"] = model
-    if search:
-        sql += " AND (input LIKE :search1 OR output LIKE :search2)"
-        params["search1"] = f"%{search}%"
-        params["search2"] = f"%{search}%"
-    sql += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
-    params["limit"] = limit
-    params["offset"] = offset
-
     with trace_db.get_engine().connect() as conn:
+        clauses, params = _build_trace_filters(
+            conn.dialect.name, project_id, status, model, search,
+            list(zip(metadata_key, metadata_value)), created_after, created_before,
+        )
+        sql = "SELECT * FROM runs WHERE parent_trace_id IS NULL"
+        for c in clauses:
+            sql += f" AND {c}"
+
+        cmp_op = "<" if sort == "desc" else ">"
+        if cursor:
+            cursor_created, cursor_id = _decode_cursor(cursor)
+            sql += (
+                f" AND (created_at {cmp_op} :cursor_created"
+                f" OR (created_at = :cursor_created AND id {cmp_op} :cursor_id))"
+            )
+            params["cursor_created"] = cursor_created
+            params["cursor_id"] = cursor_id
+
+        order = "DESC" if sort == "desc" else "ASC"
+        sql += f" ORDER BY created_at {order}, id {order} LIMIT :limit"
+        # Fetch one extra row to know whether a next page exists, without
+        # relying on offset-based counting (which doesn't scale, and isn't
+        # needed for keyset pagination anyway).
+        params["limit"] = limit + 1
+
         custom = _load_custom_prices(conn, project_id)
         rows = conn.execute(text(sql), params).mappings().fetchall()
-    return [_with_cost(_parse(r), custom) for r in rows]
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    items = [_with_cost(_parse(r), custom) for r in rows]
+    next_cursor = _encode_cursor(items[-1]["created_at"], items[-1]["id"]) if has_more and items else None
+    return {"items": items, "next_cursor": next_cursor}
+
+
+@app.get("/api/traces/count")
+def count_traces(
+    project_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    metadata_key: list[str] = Query([]),
+    metadata_value: list[str] = Query([]),
+    created_after: Optional[str] = Query(None),
+    created_before: Optional[str] = Query(None),
+):
+    with trace_db.get_engine().connect() as conn:
+        clauses, params = _build_trace_filters(
+            conn.dialect.name, project_id, status, model, search,
+            list(zip(metadata_key, metadata_value)), created_after, created_before,
+        )
+        sql = "SELECT COUNT(*) FROM runs WHERE parent_trace_id IS NULL"
+        for c in clauses:
+            sql += f" AND {c}"
+        n = conn.execute(text(sql), params).scalar()
+    return {"count": n}
 
 
 def _build_trace(conn: SAConnection, trace_id: str, custom: dict = None) -> dict | None:
@@ -231,24 +378,7 @@ def delete_project(project_id: str):
                 {"project_id": project_id},
             ).mappings().fetchall()
         ]
-        all_ids = list(top_ids)
-        for tid in top_ids:
-            sub_ids = [
-                r["id"] for r in conn.execute(
-                    text("SELECT id FROM runs WHERE parent_trace_id=:tid"),
-                    {"tid": tid},
-                ).mappings().fetchall()
-            ]
-            all_ids.extend(sub_ids)
-        if all_ids:
-            id_params = {f"id{i}": v for i, v in enumerate(all_ids)}
-            ph = ",".join(f":id{i}" for i in range(len(all_ids)))
-            conn.execute(
-                text(f"DELETE FROM tool_calls WHERE turn_id IN (SELECT id FROM turns WHERE trace_id IN ({ph}))"),
-                id_params,
-            )
-            conn.execute(text(f"DELETE FROM turns WHERE trace_id IN ({ph})"), id_params)
-            conn.execute(text(f"DELETE FROM runs WHERE id IN ({ph})"), id_params)
+        _cascade_delete_runs(conn, top_ids)
         conn.execute(
             text("DELETE FROM projects WHERE id=:project_id"), {"project_id": project_id}
         )
@@ -258,22 +388,47 @@ def delete_project(project_id: str):
 @app.delete("/api/traces/{trace_id}")
 def delete_trace(trace_id: str):
     with trace_db.get_engine().begin() as conn:
-        sub_ids = [
-            r["id"] for r in conn.execute(
-                text("SELECT id FROM runs WHERE parent_trace_id=:trace_id"),
-                {"trace_id": trace_id},
-            ).mappings().fetchall()
-        ]
-        all_ids = [trace_id] + sub_ids
-        id_params = {f"id{i}": v for i, v in enumerate(all_ids)}
-        ph = ",".join(f":id{i}" for i in range(len(all_ids)))
-        conn.execute(
-            text(f"DELETE FROM tool_calls WHERE turn_id IN (SELECT id FROM turns WHERE trace_id IN ({ph}))"),
-            id_params,
-        )
-        conn.execute(text(f"DELETE FROM turns WHERE trace_id IN ({ph})"), id_params)
-        conn.execute(text(f"DELETE FROM runs WHERE id IN ({ph})"), id_params)
+        _cascade_delete_runs(conn, [trace_id])
     return {"ok": True}
+
+
+class BulkDeleteIds(BaseModel):
+    ids: list[str]
+
+
+@app.post("/api/traces/bulk-delete")
+def bulk_delete_traces(body: BulkDeleteIds):
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="ids required")
+    with trace_db.get_engine().begin() as conn:
+        deleted = _cascade_delete_runs(conn, body.ids)
+    return {"ok": True, "deleted": deleted}
+
+
+class BulkDeleteFilter(BaseModel):
+    project_id: Optional[str] = None
+    status: Optional[str] = None
+    model: Optional[str] = None
+    search: Optional[str] = None
+    metadata_key: list[str] = []
+    metadata_value: list[str] = []
+    created_after: Optional[str] = None
+    created_before: Optional[str] = None
+
+
+@app.post("/api/traces/bulk-delete-by-filter")
+def bulk_delete_traces_by_filter(body: BulkDeleteFilter):
+    with trace_db.get_engine().begin() as conn:
+        clauses, params = _build_trace_filters(
+            conn.dialect.name, body.project_id, body.status, body.model, body.search,
+            list(zip(body.metadata_key, body.metadata_value)), body.created_after, body.created_before,
+        )
+        sql = "SELECT id FROM runs WHERE parent_trace_id IS NULL"
+        for c in clauses:
+            sql += f" AND {c}"
+        ids = [r["id"] for r in conn.execute(text(sql), params).mappings().fetchall()]
+        deleted = _cascade_delete_runs(conn, ids)
+    return {"ok": True, "deleted": deleted}
 
 
 @app.get("/api/analytics")
@@ -531,3 +686,13 @@ def ingest_turn(run_id: str, body: IngestTurn, project_id: str = Depends(require
 _ui_dir = Path(__file__).parent / "ui" / "dist"
 if _ui_dir.exists():
     app.mount("/", StaticFiles(directory=str(_ui_dir), html=True), name="ui")
+
+    # StaticFiles(html=True) only serves index.html for "/" and real
+    # directories — it 404s on deep client-side routes like
+    # /project/<id>/trace/<id> since no such file/directory exists. Fall
+    # back to index.html for any non-API 404 so client-side routing works.
+    @app.exception_handler(404)
+    async def _spa_fallback(request, exc):
+        if request.url.path.startswith("/api"):
+            return JSONResponse(status_code=404, content={"detail": getattr(exc, "detail", "Not Found")})
+        return FileResponse(str(_ui_dir / "index.html"))

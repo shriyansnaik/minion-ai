@@ -63,6 +63,36 @@ export function shortModel(model) {
   return (model || '').split('/').pop()
 }
 
+// `created_at` is stored as UTC, but <input type="date"/"time"> values are
+// implicitly local time — these convert between the two so a date-range
+// filter actually means what the picker shows. When no time is given, a
+// "from" date means start-of-day and a "to" date means end-of-day (pass
+// endOfDay) — otherwise "to: today" with no time would exclude all of today.
+// Formatted to match the backend's `datetime.isoformat()` output exactly
+// (+00:00 suffix, not "Z"; microsecond-padded) so string comparison against
+// stored created_at values is always correct, not just usually correct.
+export function toUtcIso(dateStr, timeStr, endOfDay = false) {
+  if (!dateStr) return ''
+  const time = timeStr ? `${timeStr}:00` : (endOfDay ? '23:59:59.999' : '00:00:00')
+  const d = new Date(`${dateStr}T${time}`)
+  const pad = (n, len = 2) => String(n).padStart(len, '0')
+  return (
+    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}` +
+    `.${pad(d.getUTCMilliseconds(), 3)}000+00:00`
+  )
+}
+
+export function fromUtcIso(iso) {
+  if (!iso) return { date: '', time: '' }
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  }
+}
+
 // ── Icons ──────────────────────────────────────────────────────────────
 // Minimal stroke icons; inherit color via currentColor.
 

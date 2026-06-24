@@ -312,6 +312,17 @@ class Minion:
         metadata: dict = None,
         parent_trace_id: str = None,
     ) -> RunResult:
+        """Run the minion.
+
+        `metadata` is stored as a flat string->string map: non-string scalars
+        are stringified, `None` values are dropped, and nested dicts/lists are
+        JSON-encoded as a string. To filter on a metadata field in the trace
+        UI, use a simple non-nested string value, e.g.
+        `metadata={"ticket_id": "T-123"}` filters cleanly; a nested value like
+        `metadata={"context": {"a": 1}}` is still stored and viewable on the
+        trace, but won't be practically filterable since it'd require typing
+        the exact serialized JSON string into the filter box.
+        """
         from .tracing import RunTracer
 
         tracer = RunTracer(parent_trace_id=parent_trace_id)
