@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import ProjectSelect from './components/ProjectSelect'
 import RunList from './components/RunList'
 import TraceDetail from './components/TraceDetail'
+import FilterPanel from './components/FilterPanel'
 import Analytics from './components/Analytics'
 import SettingsModal from './components/SettingsModal'
 import { Icon } from './lib'
@@ -118,6 +119,7 @@ export default function App() {
   const [project, setProject] = useState(null)
   const [tab, setTab] = useState('traces')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [runs, setRuns] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -294,24 +296,41 @@ export default function App() {
       />
       {tab === 'traces' ? (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <RunList
-            runs={runs}
-            loading={loading}
-            filters={filters}
-            onFilter={setFilters}
-            selectedId={selectedId}
-            onSelect={selectTrace}
-            onDelete={handleDelete}
-            projectId={project.id}
-            pageSize={PAGE_SIZE}
-            currentPage={currentPage}
-            furthestKnownPage={furthestKnownPage}
-            hasNextPage={hasNextPage}
-            totalCount={totalCount}
-            onPageChange={goToPage}
-            onBulkDeleted={refetchAfterBulkDelete}
-          />
-          <TraceDetail traceId={selectedId} onSelect={selectTrace} />
+          {filtersOpen && (
+            <FilterPanel
+              filters={filters}
+              onApply={setFilters}
+              projectId={project.id}
+              onClose={() => setFiltersOpen(false)}
+            />
+          )}
+          <div style={{ flex: 1, position: 'relative', minWidth: 0, overflow: 'hidden' }}>
+            <RunList
+              runs={runs}
+              loading={loading}
+              filters={filters}
+              onFilter={setFilters}
+              filtersOpen={filtersOpen}
+              onToggleFilters={() => setFiltersOpen(o => !o)}
+              selectedId={selectedId}
+              onSelect={selectTrace}
+              onDelete={handleDelete}
+              projectId={project.id}
+              pageSize={PAGE_SIZE}
+              currentPage={currentPage}
+              furthestKnownPage={furthestKnownPage}
+              hasNextPage={hasNextPage}
+              totalCount={totalCount}
+              onPageChange={goToPage}
+              onBulkDeleted={refetchAfterBulkDelete}
+            />
+            <TraceDetail
+              traceId={selectedId}
+              onSelect={selectTrace}
+              onClose={() => selectTrace(null)}
+              onDeleted={handleDelete}
+            />
+          </div>
         </div>
       ) : (
         <Analytics project={project} />

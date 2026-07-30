@@ -127,6 +127,11 @@ export const Icon = {
   layers: p => <Svg {...p}><path d="m12 2 9 5-9 5-9-5z" /><path d="m3 12 9 5 9-5M3 17l9 5 9-5" /></Svg>,
   plus: p => <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>,
   alert: p => <Svg {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></Svg>,
+  close: p => <Svg {...p}><path d="M18 6 6 18M6 6l12 12" /></Svg>,
+  filter: p => <Svg {...p}><path d="M3 4h18l-7 8v6l-4 2v-8z" /></Svg>,
+  trash: p => <Svg {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" /></Svg>,
+  arrowDown: p => <Svg {...p}><path d="M12 5v14M19 12l-7 7-7-7" /></Svg>,
+  arrowUp: p => <Svg {...p}><path d="M12 19V5M5 12l7-7 7 7" /></Svg>,
 }
 
 // Pick a tool icon by name heuristics.
