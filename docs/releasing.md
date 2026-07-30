@@ -4,7 +4,7 @@ A release publishes both halves of the project from a **single version tag** —
 local builds, everything runs on GitHub Actions:
 
 - `minion-ai` → **PyPI** (`pip install minion-ai`)
-- `minion-ui` multi-arch image → **Docker Hub** (`docker pull shriyansnaik/minion-ui`)
+- `minion-server` multi-arch image → **Docker Hub** (`docker pull shriyansnaik/minion-server`)
 
 ## When to release
 
@@ -49,12 +49,12 @@ release when there's something worth shipping to users. Pick the new version wit
 
 5. Watch the **Actions** tab. Two workflows run on the tag:
    - **Publish to PyPI** — builds the UI, builds the package, publishes via OIDC
-   - **Publish minion-ui image** — builds `amd64` + `arm64` on native runners, pushes a multi-arch tag
+   - **Publish minion-server image** — builds `amd64` + `arm64` on native runners, pushes a multi-arch tag
 
 6. Verify once both are green:
    ```bash
    pip install minion-ai==0.1.3
-   docker buildx imagetools inspect shriyansnaik/minion-ui:0.1.3   # lists linux/amd64 and linux/arm64
+   docker buildx imagetools inspect shriyansnaik/minion-server:0.1.3   # lists linux/amd64 and linux/arm64
    ```
 
 ## If something goes wrong

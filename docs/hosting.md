@@ -1,10 +1,10 @@
 # Hosting the dashboard server
 
-The `minion-ui` server receives traces, stores them, and serves the dashboard at
+The `minion-server` container receives traces, stores them, and serves the dashboard at
 **port 7337**. This guide covers running it with Docker (recommended) or directly
 with uvicorn, on either SQLite or PostgreSQL.
 
-> Replace `ghcr.io/shriyansnaik/minion-ui:latest` below with your own published
+> Replace `ghcr.io/shriyansnaik/minion-server:latest` below with your own published
 > image (see [publishing-the-image.md](publishing-the-image.md)). If you'd rather
 > build from the repo source instead of pulling a published image, use the
 > compose files at the **repo root** (`docker-compose*.yml`) — they say `build: .`
@@ -21,8 +21,8 @@ in a named volume mounted at `/root/.minion`.
 
 ```yaml
 services:
-  minion-ui:
-    image: ghcr.io/shriyansnaik/minion-ui:latest
+  minion-server:
+    image: ghcr.io/shriyansnaik/minion-server:latest
     ports:
       - "7337:7337"
     volumes:
@@ -42,7 +42,7 @@ Or without compose:
 
 ```bash
 docker run -d -p 7337:7337 -v minion_data:/root/.minion \
-  ghcr.io/shriyansnaik/minion-ui:latest
+  ghcr.io/shriyansnaik/minion-server:latest
 ```
 
 ---
@@ -57,8 +57,8 @@ environment variable.
 
 ```yaml
 services:
-  minion-ui:
-    image: ghcr.io/shriyansnaik/minion-ui:latest
+  minion-server:
+    image: ghcr.io/shriyansnaik/minion-server:latest
     ports:
       - "7337:7337"
     environment:
@@ -102,8 +102,8 @@ service needed.
 
 ```yaml
 services:
-  minion-ui:
-    image: ghcr.io/shriyansnaik/minion-ui:latest
+  minion-server:
+    image: ghcr.io/shriyansnaik/minion-server:latest
     ports:
       - "7337:7337"
     environment:
@@ -133,7 +133,7 @@ DATABASE_URL=postgresql://user:pass@host:5432/minion \
 ```
 
 `minion-ai` ships with FastAPI, uvicorn, and the Postgres driver out of the box.
-(For a quick local viewer over a local SQLite file, `minion ui` also works — see
+(For a quick local viewer over a local SQLite file, `minion serve` also works — see
 [remote-tracing.md](remote-tracing.md#local-mode).)
 
 ---
@@ -183,7 +183,7 @@ Or in one step: `docker compose up -d --pull always`.
 Notes:
 
 - This pulls the newest image only if your compose uses a moving tag like
-  `image: ghcr.io/shriyansnaik/minion-ui:latest`. If you pinned a specific version
+  `image: ghcr.io/shriyansnaik/minion-server:latest`. If you pinned a specific version
   (e.g. `:0.1.2`), bump it to the new version in the compose file first.
 - **Your data is preserved.** Traces live in the Postgres volume (or your managed
   database), which survives `pull` / `up` / `down`. Only `docker compose down -v`
@@ -196,7 +196,7 @@ To pin to an exact version instead of tracking `latest`, set the version tag in
 your compose file and update it deliberately when you want to move:
 
 ```yaml
-    image: ghcr.io/shriyansnaik/minion-ui:0.1.3
+    image: ghcr.io/shriyansnaik/minion-server:0.1.3
 ```
 
 ### Updating the agent library

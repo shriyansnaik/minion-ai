@@ -25,10 +25,10 @@ View them with the bundled local dashboard:
 
 ```bash
 pip install minion-ai
-minion ui            # opens http://localhost:7337
+minion serve         # opens http://localhost:7337
 ```
 
-Options: `minion ui --port 7337 --db-path /path/to/traces.db`.
+Options: `minion serve --port 7337 --db-path /path/to/traces.db`.
 
 ---
 
@@ -43,7 +43,7 @@ import minions
 minions.init(
     tracing=True,
     project="my-project",
-    trace_url="https://traces.mycompany.com",   # your minion-ui server
+    trace_url="https://traces.mycompany.com",   # your minion-server
     tracing_secret_token="mni_xK9mP2...",        # project-scoped token
 )
 ```

@@ -24,7 +24,7 @@ mn.init(api_key="sk-...", tracing=True, project="test")
 ```
 
 `tracing=True` records every run so you can inspect the whole agent tree later in
-the dashboard (`minion ui`). `project` groups those runs.
+the dashboard (`minion serve`). `project` groups those runs.
 
 ---
 
@@ -35,9 +35,8 @@ The researcher needs to actually look things up. Here we wrap the
 with a docstring becomes a tool:
 
 ```python
+import os
 from tavily import TavilyClient
-
-client = TavilyClient("tvly-...")
 
 def search(query: str) -> list[dict]:
     """Search the web and return relevant results.
@@ -48,6 +47,7 @@ def search(query: str) -> list[dict]:
     Returns:
         A list of results, each a dict with 'title', 'url', and 'content'.
     """
+    client = TavilyClient(os.environ["TAVILY_API_KEY"])
     response = client.search(query=query, search_depth="advanced")
     return response["results"]
 
@@ -60,9 +60,22 @@ def extract(urls: list[str]) -> list[dict]:
     Returns:
         A list of results, each a dict with 'url' and 'raw_content'.
     """
+    client = TavilyClient(os.environ["TAVILY_API_KEY"])
     response = client.extract(urls=urls)
     return response["results"]
 ```
+
+> **Tools must be thread-safe when you use `parallel_tools=True`.** With parallel
+> tools on, a single turn's tool calls run on different threads at once — and with
+> a team, that nests (the manager runs specialists in parallel, each specialist
+> runs its own searches in parallel). Notice the client is built **inside** each
+> function, not shared at module level. `TavilyClient` wraps a `requests.Session`,
+> and a `Session` is **not thread-safe** — sharing one across threads corrupts its
+> connection pool and surfaces as `ConnectionResetError(10054)` /
+> `ProtocolError('Connection aborted.')`. Constructing it per call keeps each
+> thread isolated. The same rule applies to any client (DB connections, HTTP
+> sessions, SDK clients): give each call its own, or guard it. If your tools can't
+> be made thread-safe, leave `parallel_tools=False` (the default).
 
 ---
 
@@ -198,7 +211,7 @@ res.trace_id       # handle to this run in the dashboard
 Start the viewer:
 
 ```bash
-minion ui
+minion serve
 ```
 
 Open the `test` project and click the run. Tracing captures the **full tree**:
@@ -236,4 +249,5 @@ in parallel threads. Each call gets its own isolated run and its own trace.
 | Ad-hoc fan-out over many items | Set `allow_sub_agents=True`; the model uses `_spawn_sub_minion`. |
 | Both | Use them together (as in this guide). |
 | A different/cheaper model for ad-hoc workers | Set `secondary_model=...` on the manager. |
+| Run a turn's tool calls in parallel | Set `parallel_tools=True` (tools must be thread-safe — see §2). |
 | The run's handle for the dashboard | Read `res.trace_id`. |

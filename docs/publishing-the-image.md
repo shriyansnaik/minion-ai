@@ -1,4 +1,4 @@
-# Publishing the minion-ui image *(maintainers)*
+# Publishing the minion-server image *(maintainers)*
 
 The dashboard ships as a Docker image. Publishing it to a registry is the Docker
 equivalent of publishing the library to PyPI: once it's on a registry, anyone can
@@ -33,7 +33,7 @@ keeps the heavy build off your laptop.
 
 **Run it:**
 
-- **Manually:** repo → **Actions** tab → *Publish minion-ui image* → **Run workflow**. Publishes `:latest`.
+- **Manually:** repo → **Actions** tab → *Publish minion-server image* → **Run workflow**. Publishes `:latest`.
 - **On release:** push a version tag and it publishes the matching versions:
   ```bash
   git tag v0.1.2
@@ -58,12 +58,12 @@ self-contained — no local `dist/` or extra steps needed.
 echo "$GHCR_PAT" | docker login ghcr.io -u shriyansnaik --password-stdin
 
 # 2. Build and tag (match the version to pyproject.toml)
-docker build -t ghcr.io/shriyansnaik/minion-ui:0.1.2 \
-             -t ghcr.io/shriyansnaik/minion-ui:latest .
+docker build -t ghcr.io/shriyansnaik/minion-server:0.1.2 \
+             -t ghcr.io/shriyansnaik/minion-server:latest .
 
 # 3. Push
-docker push ghcr.io/shriyansnaik/minion-ui:0.1.2
-docker push ghcr.io/shriyansnaik/minion-ui:latest
+docker push ghcr.io/shriyansnaik/minion-server:0.1.2
+docker push ghcr.io/shriyansnaik/minion-server:latest
 ```
 
 After the first push, make the package public in the repo's **Packages** settings
@@ -76,11 +76,11 @@ so users can pull without authenticating.
 ```bash
 docker login -u shriyansnaik
 
-docker build -t shriyansnaik/minion-ui:0.1.2 \
-             -t shriyansnaik/minion-ui:latest .
+docker build -t shriyansnaik/minion-server:0.1.2 \
+             -t shriyansnaik/minion-server:latest .
 
-docker push shriyansnaik/minion-ui:0.1.2
-docker push shriyansnaik/minion-ui:latest
+docker push shriyansnaik/minion-server:0.1.2
+docker push shriyansnaik/minion-server:latest
 ```
 
 ---
@@ -92,8 +92,8 @@ To support both Intel/AMD and Apple Silicon / ARM servers:
 ```bash
 docker buildx create --use --name minion-builder   # once
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/shriyansnaik/minion-ui:0.1.2 \
-  -t ghcr.io/shriyansnaik/minion-ui:latest \
+  -t ghcr.io/shriyansnaik/minion-server:0.1.2 \
+  -t ghcr.io/shriyansnaik/minion-server:latest \
   --push .
 ```
 
@@ -113,8 +113,8 @@ Once published, point the hosting docs / compose files at it:
 
 ```yaml
 services:
-  minion-ui:
-    image: ghcr.io/shriyansnaik/minion-ui:latest   # instead of `build: .`
+  minion-server:
+    image: ghcr.io/shriyansnaik/minion-server:latest   # instead of `build: .`
     # ...
 ```
 

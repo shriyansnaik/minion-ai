@@ -1,5 +1,5 @@
 services:
-  minion-ui:
+  minion-server:
     build: .
     ports:
       - "7337:7337"

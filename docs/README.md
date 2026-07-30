@@ -3,7 +3,7 @@
 Minion AI has two pieces:
 
 - **minion-ai** — the agent library your code runs (`pip install minion-ai`).
-- **minion-ui** — a dashboard server that stores and displays traces.
+- **minion-server** — a dashboard server that stores and displays traces.
 
 You can run them together on one machine, or run the dashboard as a shared
 server that many agents push to.
@@ -27,5 +27,5 @@ The dashboard server can store traces in:
 - **[hosting.md](hosting.md)** — run the dashboard server (Docker or bare uvicorn; SQLite or Postgres).
 - **[remote-tracing.md](remote-tracing.md)** — point your agent at a local file or a remote server, and create API tokens.
 - **[releasing.md](releasing.md)** — *(maintainers)* cut a release: one tag publishes to PyPI **and** Docker Hub, plus when to bump which version.
-- **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* details of the `minion-ui` image build/registry.
+- **[publishing-the-image.md](publishing-the-image.md)** — *(maintainers)* details of the `minion-server` image build/registry.
 - **[publishing-to-pypi.md](publishing-to-pypi.md)** — *(maintainers)* details of the PyPI trusted-publishing setup.

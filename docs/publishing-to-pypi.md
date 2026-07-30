@@ -35,7 +35,7 @@ The tag triggers **both** release workflows:
 - `pypi-publish.yml` → builds the UI, builds the package, publishes to PyPI.
 - `docker-publish.yml` → builds and pushes the multi-arch Docker image.
 
-So one tag ships both `pip install minion-ai` and `docker pull shriyansnaik/minion-ui`.
+So one tag ships both `pip install minion-ai` and `docker pull shriyansnaik/minion-server`.
 
 You can also run either workflow manually from the **Actions** tab without tagging.
 

@@ -75,7 +75,7 @@ def init(
         tracing: Enable trace collection. Writes to ~/.minion/traces.db by default.
         project: Project name to group traces under. Required when tracing=True.
         db_path: Override the SQLite database path (local mode only).
-        trace_url: Push traces to a remote minion-ui server instead of writing locally.
+        trace_url: Push traces to a remote minion-server instead of writing locally.
         tracing_secret_token: Project-scoped token (mni_...) authenticating remote pushes.
     """
     if tracing and not project:

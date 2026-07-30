@@ -1,4 +1,4 @@
-# Builds the multi-arch minion-ui image on GitHub's hardware and pushes it to
+# Builds the multi-arch minion-server image on GitHub's hardware and pushes it to
 # Docker Hub. Each architecture is built on its OWN native runner (no slow QEMU
 # emulation), then the two are merged into a single multi-arch tag.
 #
@@ -11,7 +11,7 @@
 #   - Manually from the Actions tab ("Run workflow") -> publishes :latest
 #   - Pushing a version tag like v0.1.2          -> publishes :0.1.2, :0.1, :latest
 
-name: Publish minion-ui image
+name: Publish minion-server image
 
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ on:
       - "v*"
 
 env:
-  IMAGE: docker.io/shriyansnaik/minion-ui
+  IMAGE: docker.io/shriyansnaik/minion-server
 
 jobs:
   build:

@@ -4,7 +4,7 @@ A complete walkthrough: run the dashboard (backed by PostgreSQL in Docker), then
 run a traced agent and watch its traces show up. Everything runs on your Mac.
 
 > These steps are the same on Intel Macs, Windows, and Linux — only the Docker
-> Desktop install differs. The `minion-ui` image is multi-architecture, so your
+> Desktop install differs. The `minion-server` image is multi-architecture, so your
 > M4 automatically pulls the `arm64` build; you don't have to think about it.
 
 You'll need an LLM API key (e.g. OpenAI) for the agent to actually run.
@@ -26,8 +26,8 @@ Make an empty folder and create one file in it:
 `docker-compose.yml`
 ```yaml
 services:
-  minion-ui:
-    image: shriyansnaik/minion-ui:latest
+  minion-server:
+    image: shriyansnaik/minion-server:latest
     ports:
       - "7337:7337"
     environment:
@@ -154,8 +154,8 @@ Replace the whole `docker-compose.yml` with:
 
 ```yaml
 services:
-  minion-ui:
-    image: shriyansnaik/minion-ui:latest
+  minion-server:
+    image: shriyansnaik/minion-server:latest
     ports:
       - "7337:7337"
     environment:

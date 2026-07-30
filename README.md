@@ -92,7 +92,7 @@ agent("Do something interesting")
 Launch the dashboard:
 
 ```bash
-minion ui
+minion serve
 ```
 
 <p align="center">
@@ -103,7 +103,7 @@ The UI groups traces by project, lets you drill into every turn and tool call, a
 
 ### Remote tracing (team server)
 
-To send traces to a shared minion-ui server instead of a local file, add `trace_url`
+To send traces to a shared minion-server instead of a local file, add `trace_url`
 and a project-scoped token (create one in the dashboard under a project's
 **Settings → API Tokens**):
 
