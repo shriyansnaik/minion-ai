@@ -10,7 +10,7 @@ class RunTracer:
     """Owns every tracing side effect for one Minion.__call__ run.
 
     The agent loop only ever talks to this object (construct it, then call
-    start/time_turn/time_tool/record_tool_call/record_turn/finish/fail). Config
+    start/time_turn/record_tool_call/record_turn/finish/fail). Config
     lookup, project resolution, DB writes, and latency/token bookkeeping all
     live here so they stay out of the agent loop. Everything no-ops cleanly
     when tracing is disabled or trace creation fails (trace_id stays None).
@@ -21,7 +21,6 @@ class RunTracer:
         self.trace_id = None
         self._run_start = None
         self._turn_latency_ms = 0
-        self._tool_latency_ms = 0
         self._total_input_tokens = 0
         self._total_output_tokens = 0
         self._pending_tool_calls = []
@@ -58,18 +57,12 @@ class RunTracer:
         yield
         self._turn_latency_ms = int((time.monotonic() - start) * 1000)
 
-    @contextmanager
-    def time_tool(self):
-        start = time.monotonic()
-        yield
-        self._tool_latency_ms = int((time.monotonic() - start) * 1000)
-
-    def record_tool_call(self, tool_name: str, args: dict, result) -> None:
+    def record_tool_call(self, tool_name: str, args: dict, result, latency_ms: int) -> None:
         self._pending_tool_calls.append({
             "tool_name": tool_name,
             "args": args,
             "result": str(result),
-            "latency_ms": self._tool_latency_ms,
+            "latency_ms": latency_ms,
         })
 
     def record_turn(self, turn_number: int, thought: str, usage) -> None:

@@ -1,7 +1,9 @@
 import inspect
 import json
+import time
 import litellm
 import docstring_parser
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from .models import Tool, ToolArg, ToolCall, MinionOutput, RunResult
@@ -64,21 +66,15 @@ class _Run:
     def trace_id(self):
         return self.tracer.trace_id
 
-    def add(self, message, message_type: str = None):
-        if isinstance(message, MinionOutput):
-            self.conversation.append({"message_type": "thought", "content": message.next_thought})
+    def add(self, message, message_type: str = "tool_output"):
+        self.conversation.append({"message_type": message_type, "content": message})
 
-            for tool in message.next_tools:
-                args = ", ".join(f"{a.key}={a.value!r}" for a in tool.args)
-                self.conversation.append({
-                    "message_type": "tool",
-                    "content": f"Tool('{tool.tool_name}' called with Args({args}))",
-                })
-        else:
-            self.conversation.append({
-                "message_type": message_type or "tool_output",
-                "content": message,
-            })
+    def add_thought(self, thought: str):
+        self.add(thought, "thought")
+
+    def add_tool_call(self, tool: ToolCall):
+        args = ", ".join(f"{a.key}={a.value!r}" for a in tool.args)
+        self.add(f"Tool('{tool.tool_name}' called with Args({args}))", "tool")
 
     def format(self) -> str:
         formatted_conversation = str(self.conversation)
@@ -100,6 +96,7 @@ class Minion:
         tools: list | None = None,
         sub_minions: list["Minion"] | None = None,
         allow_sub_agents: bool = False,
+        parallel_tools: bool = False,
         max_turns: int = 10,
         name: str = None,
         description: str = None,
@@ -111,6 +108,7 @@ class Minion:
         self.system_prompt = system_prompt
         self.tools = tools or []
         self.allow_sub_agents = allow_sub_agents
+        self.parallel_tools = parallel_tools
         self.max_turns = max_turns
         # name/description are only required when this minion is registered as a
         # specialist in another minion's `sub_minions` (validated there).
@@ -242,6 +240,7 @@ class Minion:
             # spawn more generic workers (bounds runaway recursion).
             sub_minions=list(self.sub_minions.values()),
             allow_sub_agents=False,
+            parallel_tools=self.parallel_tools,
         )
         return worker(input, parent_trace_id=parent_trace_id).output
 
@@ -277,6 +276,15 @@ class Minion:
         if tool.needs_parent_trace:
             coerced["parent_trace_id"] = parent_trace_id
         return tool.fn(**coerced)
+
+    def _execute_tool(self, tool: ToolCall, parent_trace_id: str) -> dict:
+        """Run one tool call, timing it on its own so parallel calls each get an
+        accurate latency. Returns the call, its args, output, and latency."""
+        args = {a.key: a.value for a in tool.args}
+        start = time.monotonic()
+        output = self.invoke_tool(tool.tool_name, args, parent_trace_id=parent_trace_id)
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {"tool": tool, "args": args, "output": output, "latency_ms": latency_ms}
 
     def _build_instructions(self) -> str:
         tool_schemas = "\n".join([str(tool.schema) for tool in self.parsed_tools])
@@ -357,19 +365,26 @@ class Minion:
                 label = self.name or self.model
                 print(f"===== {label} =====")
                 print(output, end="\n\n")
-                run.add(message=output)
+                run.add_thought(output.next_thought)
+
+                # Run the turn's tools (in parallel if enabled), then record each
+                # call next to its own output in the model's original order.
+                if self.parallel_tools and len(output.next_tools) > 1:
+                    with ThreadPoolExecutor() as pool:
+                        results = list(pool.map(
+                            lambda t: self._execute_tool(t, run.trace_id), output.next_tools
+                        ))
+                else:
+                    results = [self._execute_tool(t, run.trace_id) for t in output.next_tools]
 
                 finished = False
                 final_output = None
 
-                for tool in output.next_tools:
-                    args = {a.key: a.value for a in tool.args}
-                    with tracer.time_tool():
-                        tool_output = self.invoke_tool(
-                            tool_name=tool.tool_name, args=args, parent_trace_id=run.trace_id,
-                        )
-                    tracer.record_tool_call(tool.tool_name, args, tool_output)
+                for r in results:
+                    tool, args, tool_output = r["tool"], r["args"], r["output"]
+                    run.add_tool_call(tool)
                     run.add(message=tool_output)
+                    tracer.record_tool_call(tool.tool_name, args, tool_output, r["latency_ms"])
 
                     if tool.tool_name == "_finish":
                         finished = True

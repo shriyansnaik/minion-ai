@@ -52,15 +52,23 @@ def _load_custom_prices(conn: SAConnection, project_id: str | None) -> dict:
     }
 
 
-def _with_cost(run: dict, custom: dict = None) -> dict:
-    model = run.get("model", "")
-    itok = run.get("total_input_tokens") or 0
-    otok = run.get("total_output_tokens") or 0
+def _estimate_cost(model: str, itok: int, otok: int, custom: dict = None) -> float | None:
+    """Cost for a given token split, preferring per-project custom prices and
+    falling back to built-in pricing. Shared by run totals and per-turn cost so
+    the turns always sum back to the run total."""
     if custom and model in custom:
         inp, out = custom[model]
-        run["estimated_cost"] = itok * inp + otok * out
-    else:
-        run["estimated_cost"] = costs.estimate(model, itok, otok)
+        return itok * inp + otok * out
+    return costs.estimate(model, itok, otok)
+
+
+def _with_cost(run: dict, custom: dict = None) -> dict:
+    run["estimated_cost"] = _estimate_cost(
+        run.get("model", ""),
+        run.get("total_input_tokens") or 0,
+        run.get("total_output_tokens") or 0,
+        custom,
+    )
     return run
 
 
@@ -291,6 +299,16 @@ def _build_trace(conn: SAConnection, trace_id: str, custom: dict = None) -> dict
     turn_list = []
     for t in turns:
         td = _parse(t)
+        # Per-turn cost, computed the same way as the run total (so turns sum
+        # back to it). output_tokens here is the model's generation for the
+        # turn (thought + tool calls); tool *results* are billed as input on
+        # the following turn, never as output.
+        td["estimated_cost"] = _estimate_cost(
+            run.get("model", ""),
+            td.get("input_tokens") or 0,
+            td.get("output_tokens") or 0,
+            custom,
+        )
         tcs = conn.execute(
             text("SELECT * FROM tool_calls WHERE turn_id=:turn_id ORDER BY seq"),
             {"turn_id": td["id"]},
