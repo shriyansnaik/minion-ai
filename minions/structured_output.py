@@ -34,6 +34,16 @@ class StructuredOutputError(RuntimeError):
     """
 
 
+class SchemaUnsupportedError(StructuredOutputError):
+    """The provider itself refused to enforce the schema for this model.
+
+    Split out from the base because the two failures need different responses:
+    this one means "use a different model, or the prompted fallback", whereas a
+    plain StructuredOutputError means the request was fine and the *reply* was
+    unusable. Only this one is worth retrying on the prompted path.
+    """
+
+
 # Fragments that show up when a provider rejects or mishandles structured
 # output. Matched case-insensitively against the exception text.
 _STRUCTURED_OUTPUT_SIGNALS = (
@@ -75,9 +85,9 @@ def native_schema_supported(model: str) -> bool:
         return False
 
 
-def unsupported_model_error(model: str, cause: BaseException) -> StructuredOutputError:
+def unsupported_model_error(model: str, cause: BaseException) -> SchemaUnsupportedError:
     """Build the error a user sees when a model can't do structured output."""
-    return StructuredOutputError(
+    return SchemaUnsupportedError(
         f"The model {model!r} could not produce the structured output Minion needs.\n"
         "\n"
         "Every turn, Minion asks for a strict JSON object -- a thought plus the tools\n"
@@ -97,6 +107,54 @@ def unsupported_model_error(model: str, cause: BaseException) -> StructuredOutpu
         f"Provider support and tiers: {DOCS_URL}\n"
         "\n"
         f"Original provider error:\n{cause}"
+    )
+
+
+def unparseable_output_error(
+    model: str, cause: BaseException | None, finish_reason: str | None, used_native: bool
+) -> StructuredOutputError:
+    """Build the error for a model that was *asked* correctly and still didn't
+    return a usable envelope after every retry.
+
+    Deliberately distinct from `unsupported_model_error`: the provider accepted
+    the request here, so the model's schema support is not the problem and
+    saying it is sends people to change models when they should be looking at
+    the length of their tool output.
+    """
+    if finish_reason == "length":
+        detail = (
+            "The reply was cut off before it finished (finish_reason='length'), so the\n"
+            "JSON was incomplete. That is a size problem, not a formatting one.\n"
+            "\n"
+            "What to do:\n"
+            "  1. Trim what your tools return. Every tool result is re-sent on every\n"
+            "     later turn of a run, so one large return is paid for repeatedly and\n"
+            "     eventually crowds out the reply.\n"
+            "  2. Delegate to sub-agents so each context stays small -- see\n"
+            "     allow_sub_agents and secondary_model.\n"
+            "  3. Lower max_turns, or use a model with a larger output limit.\n"
+        )
+    else:
+        detail = (
+            f"The provider accepted the request{' with schema enforcement' if used_native else ''},\n"
+            "but the reply could not be parsed as the required envelope even after\n"
+            "re-prompting.\n"
+            "\n"
+            "What to do:\n"
+            "  1. Raise max_parse_retries if this is intermittent.\n"
+            "  2. If it happens every time, the model is a poor fit -- try a Tier 1\n"
+            f"     model. Provider tiers: {DOCS_URL}\n"
+        )
+
+    return StructuredOutputError(
+        f"The model {model!r} did not return a usable response after every retry.\n"
+        "\n"
+        "Minion needs a strict JSON object each turn -- a thought plus the tools to\n"
+        "call next.\n"
+        "\n"
+        f"{detail}"
+        "\n"
+        f"Last parse failure:\n{cause}"
     )
 
 

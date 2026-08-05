@@ -124,10 +124,28 @@ Honest accounting of what has actually been run:
 
 | Model | Verified |
 | --- | --- |
-| `groq/openai/gpt-oss-120b` | ✅ live run, passed |
-| `groq/llama-3.3-70b-versatile` | ✅ live run, failed as documented |
+| `groq/openai/gpt-oss-120b` | ✅ live run, passed — see the caveat below |
+| `groq/llama-3.3-70b-versatile` | ✅ live: fails natively as documented, **and succeeds via `structured_output="prompt"`** — multi-turn, six parallel tool calls in one turn |
 | `groq/moonshotai/kimi-k2-instruct` | ⬜ untested — no account access. `supports_response_schema` reports `False`, so Tier 3 is *expected*, not confirmed |
 | OpenAI, Anthropic, Gemini | ⬜ not yet covered by an automated test pass, despite being Tier 1 |
+
+### Caveat: intermittent `tool_use_failed` on Groq
+
+`groq/openai/gpt-oss-120b` occasionally emits a **native function call** instead
+of the required envelope — having seen your tool names described in the prompt,
+it reaches for the provider's own function-calling — and Groq then rejects its
+own generation:
+
+```
+{"error":{"message":"Tool choice is none, but model called a tool",
+          "code":"tool_use_failed",
+          "failed_generation":"{\"name\": \"search_code\", ...}"}}
+```
+
+The same model, prompt and tools succeed on the next attempt, so this is not a
+capability limit. Minion retries a rejected request up to `max_parse_retries`
+times before concluding a model can't do structured output, which absorbs it.
+Worth knowing if you see it in a trace.
 
 Closing that last gap — a scripted smoke test across the three Tier 1 providers
 — is a pre-launch blocker.
@@ -140,6 +158,11 @@ Closing that last gap — a scripted smoke test across the three Tier 1 provider
   `reasoning_effort`.
 - The environment variable must be `GROQ_API_KEY` **exactly**. LiteLLM will not
   pick up a suffixed name like `GROQ_API_KEY_1`.
+- **The free tier allows 8,000 tokens per minute.** That is small enough to
+  matter: a sub-agent fan-out spends several times it in one burst and every
+  call in that burst fails with `RateLimitError`. Check your own headroom with
+  `x-ratelimit-limit-tokens` / `x-ratelimit-remaining-tokens` on any response.
+  Single-agent runs with small tool returns fit comfortably; delegation does not.
 - Groq prices are in the built-in table for `gpt-oss-120b`, `gpt-oss-20b`,
   `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`. Other Groq models show
   as unpriced until you add a

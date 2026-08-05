@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- Fix deleting a run leaving its *grandchild* sub-runs orphaned — the cascade only followed one level, so runs from a specialist that itself delegated stayed in the database, invisible in the trace list but still counted in analytics
+- Distinguish "this model can't do structured output" from "this reply couldn't be parsed": a model whose provider accepted the request is no longer reported as lacking schema support, and a truncated reply now says so and points at tool-output size instead of re-prompting into a larger context
+- Retry a rejected structured-output request before concluding a model is incapable — `groq/openai/gpt-oss-120b` intermittently emits a native function call instead of the envelope, and one sample was enough to declare it unsupported
 - Add `structured_output` to `Minion`: `"auto"` (default) uses native JSON-schema enforcement where the provider supports it and the prompted fallback where it doesn't, `"native"` never falls back, `"prompt"` always uses the fallback. The fallback injects the schema into the system prompt, asks for `json_object` mode, and re-prompts on a malformed reply up to `max_parse_retries` times (default 2) — this makes previously unusable models such as `groq/llama-3.3-70b-versatile` work
 - Replace the raw LiteLLM `BadRequestError` from a model that can't do structured output with a `StructuredOutputError` naming the model, explaining the requirement, and listing the ways forward. Errors unrelated to structured output propagate unchanged
 - Reparse retries are charged to the turn that made them, so a run that retried reports the tokens it actually spent

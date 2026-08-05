@@ -34,7 +34,7 @@ FINISH = (
 )
 
 
-def fake_completion(script, calls):
+def fake_completion(script, calls, finish_reason="stop"):
     """Stand in for `litellm.completion`, replaying `script` one item per call.
 
     A `str` item is returned as message content; an `Exception` item is raised.
@@ -49,7 +49,10 @@ def fake_completion(script, calls):
         if isinstance(item, BaseException):
             raise item
         return types.SimpleNamespace(
-            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=item))],
+            choices=[types.SimpleNamespace(
+                message=types.SimpleNamespace(content=item),
+                finish_reason=finish_reason,
+            )],
             usage=types.SimpleNamespace(prompt_tokens=100, completion_tokens=20),
         )
 
@@ -155,15 +158,52 @@ def test_native_path_sends_the_schema():
     assert calls[0]["response_format"] is MinionOutput
 
 
+TOOL_USE_FAILED = (
+    'GroqException - {"error":{"message":"Tool choice is none, but model called a '
+    'tool","code":"tool_use_failed","failed_generation":"{\\"name\\":\\"search\\"}"}}'
+)
+
+
+def test_an_intermittent_rejection_is_retried_not_fatal():
+    """Observed live on groq/openai/gpt-oss-120b: it occasionally emits a native
+    function call instead of the envelope and the provider rejects its own
+    generation. One sample is not evidence the model is incapable."""
+    calls = []
+    litellm.completion = fake_completion([Exception(TOOL_USE_FAILED), FINISH], calls)
+
+    result = Minion(model="groq/openai/gpt-oss-120b", structured_output="native")("q")
+
+    assert result.output == "42"
+    assert len(calls) == 2
+
+
+def test_a_persistent_rejection_still_reports_the_model_as_unsupported():
+    calls = []
+    litellm.completion = fake_completion([Exception(TOOL_USE_FAILED)] * 3, calls)
+
+    try:
+        Minion(
+            model="groq/llama-3.3-70b-versatile",
+            structured_output="native",
+            max_parse_retries=2,
+        )("q")
+    except StructuredOutputError as e:
+        assert "could not produce the structured output" in str(e)
+        assert len(calls) == 3
+        return
+    raise AssertionError("should have raised after exhausting retries")
+
+
 def test_provider_rejection_becomes_an_actionable_error():
     calls = []
     litellm.completion = fake_completion([Exception(
         "GroqException - tool call validation failed: parameters for tool "
         "json_tool_call did not match schema: missing properties: 'next_thought'"
-    )], calls)
+    )] * 3, calls)
 
     try:
-        Minion(model="groq/llama-3.3-70b-versatile", structured_output="native")("q")
+        Minion(model="groq/llama-3.3-70b-versatile", structured_output="native",
+               max_parse_retries=2)("q")
     except StructuredOutputError as e:
         text = str(e)
         assert "groq/llama-3.3-70b-versatile" in text
@@ -222,6 +262,57 @@ def test_retries_are_bounded_and_then_give_up():
     raise AssertionError("should have given up")
 
 
+def test_unparseable_output_is_not_blamed_on_schema_support():
+    """Found live: a model that the provider accepted, whose reply just didn't
+    parse, was being reported as unable to do structured output at all -- which
+    sends people to change models when nothing is wrong with the model."""
+    calls = []
+    litellm.completion = fake_completion(["junk"] * 3, calls)
+
+    try:
+        Minion(model="openai/gpt-4o", structured_output="native", max_parse_retries=2)("q")
+    except StructuredOutputError as e:
+        text = str(e)
+        assert "did not return a usable response" in text
+        assert "could not produce the structured output" not in text
+        # The remedy must not be "your model can't do schemas".
+        assert 'structured_output="prompt"' not in text
+        return
+    raise AssertionError("should have raised")
+
+
+def test_a_truncated_reply_is_reported_as_a_size_problem():
+    calls = []
+    litellm.completion = fake_completion(['{"next_thought":"a","next_to'], calls,
+                                         finish_reason="length")
+
+    try:
+        Minion(model="openai/gpt-4o", structured_output="native")("q")
+    except StructuredOutputError as e:
+        text = str(e)
+        assert "cut off" in text and "finish_reason='length'" in text
+        assert "Trim what your tools return" in text
+        # Re-prompting a truncated reply appends it *and* the complaint, making
+        # the next context bigger and the truncation certain. So: one call only.
+        assert len(calls) == 1, f"re-prompted {len(calls)} times on a truncation"
+        return
+    raise AssertionError("should have raised")
+
+
+def test_auto_does_not_fall_back_on_an_unparseable_reply():
+    """Falling back to the prompted path cannot fix a reply that was truncated
+    or garbled -- it asks the same model the same thing, less strictly."""
+    calls = []
+    litellm.completion = fake_completion(["junk"] * 4, calls)
+
+    try:
+        Minion(model="openai/gpt-4o", structured_output="auto", max_parse_retries=1)("q")
+    except StructuredOutputError:
+        assert len(calls) == 2, f"made {len(calls)} calls; expected no prompted retry"
+        return
+    raise AssertionError("should have raised")
+
+
 def test_usage_covers_every_attempt():
     # A reparse retry is a real API call; its tokens belong to the turn that
     # paid for them, or the fallback silently under-reports cost.
@@ -245,29 +336,32 @@ def test_usage_covers_every_attempt():
 # --------------------------------------------------------------------------
 
 def test_auto_falls_back_when_the_capability_table_is_wrong():
+    """Only after the rejection proves persistent -- three native attempts, then
+    the prompted path."""
+    reject = Exception("tool call validation failed: json_tool_call")
     calls = []
-    litellm.completion = fake_completion(
-        [Exception("tool call validation failed: json_tool_call"), FINISH], calls
-    )
+    litellm.completion = fake_completion([reject, reject, reject, FINISH], calls)
 
-    result = Minion(model="openai/gpt-4o", structured_output="auto")("q")
+    result = Minion(model="openai/gpt-4o", structured_output="auto",
+                    max_parse_retries=2)("q")
 
     assert result.output == "42"
-    assert calls[0]["response_format"] is MinionOutput          # tried native
-    assert calls[1]["response_format"] == {"type": "json_object"}  # then prompted
-    assert "Output Format (STRICT)" in calls[1]["messages"][0]["content"]
+    assert len(calls) == 4
+    assert all(c["response_format"] is MinionOutput for c in calls[:3])  # tried native
+    assert calls[3]["response_format"] == {"type": "json_object"}        # then prompted
+    assert "Output Format (STRICT)" in calls[3]["messages"][0]["content"]
 
 
 def test_explicit_native_does_not_silently_fall_back():
+    reject = Exception("tool call validation failed: json_tool_call")
     calls = []
-    litellm.completion = fake_completion(
-        [Exception("tool call validation failed: json_tool_call"), FINISH], calls
-    )
+    litellm.completion = fake_completion([reject, reject, reject, FINISH], calls)
 
     try:
-        Minion(model="openai/gpt-4o", structured_output="native")("q")
+        Minion(model="openai/gpt-4o", structured_output="native",
+               max_parse_retries=2)("q")
     except StructuredOutputError:
-        assert len(calls) == 1
+        assert len(calls) == 3, f"made {len(calls)} calls; must not try the prompted path"
         return
     raise AssertionError("native mode must not fall back on its own")
 

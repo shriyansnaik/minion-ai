@@ -10,11 +10,12 @@ from typing import Callable
 
 from .models import Tool, ToolArg, ToolCall, MinionOutput, RunResult
 from .structured_output import (
-    StructuredOutputError,
+    SchemaUnsupportedError,
     is_structured_output_error,
     native_schema_supported,
     parse_output,
     prompt_schema_section,
+    unparseable_output_error,
     unsupported_model_error,
 )
 
@@ -345,6 +346,7 @@ class Minion:
         usages = []
         attempts = list(messages)
         last_error = None
+        finish_reason = None
 
         for attempt in range(self.max_parse_retries + 1):
             try:
@@ -358,17 +360,43 @@ class Minion:
                     response_format=MinionOutput if use_native else {"type": "json_object"},
                 )
             except Exception as e:
-                if is_structured_output_error(e):
+                if not is_structured_output_error(e):
+                    raise
+                # A rejection is not proof the model *can't* do this. Observed on
+                # groq/openai/gpt-oss-120b: it intermittently emits a native
+                # function call instead of the envelope -- having seen tool names
+                # in the prompt -- and the provider rejects its own generation
+                # with tool_use_failed. The same model and prompt succeed on the
+                # next attempt. So sample more than once before concluding the
+                # model is incapable; a model that genuinely can't will fail
+                # every time and still end up with the right error.
+                last_error = e
+                if attempt == self.max_parse_retries:
                     raise unsupported_model_error(self.model, e) from e
-                raise
+                log.warning(
+                    "%s rejected the structured-output request (attempt %d/%d); retrying",
+                    self.model, attempt + 1, self.max_parse_retries + 1,
+                )
+                continue
 
             usages.append(getattr(response, "usage", None))
-            content = response.choices[0].message.content
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            content = choice.message.content
 
             try:
                 return parse_output(content), self._sum_usage(usages)
             except ValueError as e:
                 last_error = e
+                # A truncated reply is a size problem. Re-prompting appends the
+                # broken reply *and* the complaint, making the next context
+                # larger and the truncation certain — so stop here instead.
+                if finish_reason == "length":
+                    log.warning(
+                        "%s hit its output limit mid-envelope; not re-prompting, "
+                        "the context would only grow", self.model,
+                    )
+                    break
                 if attempt == self.max_parse_retries:
                     break
                 log.warning(
@@ -382,7 +410,7 @@ class Minion:
                     {"role": "user", "content": str(e)},
                 ]
 
-        raise unsupported_model_error(self.model, last_error)
+        raise unparseable_output_error(self.model, last_error, finish_reason, use_native)
 
     def _build_instructions(self, use_native: bool = True) -> str:
         tool_schemas = "\n".join([str(tool.schema) for tool in self.parsed_tools])
@@ -458,11 +486,15 @@ class Minion:
                 with tracer.time_turn():
                     try:
                         output, usage = self._complete(messages, use_native)
-                    except StructuredOutputError:
+                    except SchemaUnsupportedError:
                         # LiteLLM's capability table said this model enforces
                         # schemas and the provider disagreed. In `auto` that's a
                         # reason to drop to the prompted path, not to fail the
                         # run; the user asked for "whatever works".
+                        #
+                        # Only this error, not every StructuredOutputError: a
+                        # reply that was truncated or unparseable is not fixed by
+                        # asking the same model the same thing less strictly.
                         if not (use_native and self.structured_output == "auto"):
                             raise
                         log.warning(
