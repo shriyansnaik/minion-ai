@@ -131,24 +131,45 @@ def _chunks(items: list, size: int):
         yield items[i:i + size]
 
 
+def _descendant_run_ids(conn: SAConnection, run_ids: list[str]) -> list[str]:
+    """Every run reachable from `run_ids` by following parent_trace_id down.
+
+    Sub-agents nest to arbitrary depth -- a specialist can delegate to another
+    specialist -- so this walks level by level until a level turns up nothing
+    new. Collecting only immediate children (as this did originally) left
+    grandchildren orphaned: invisible in the trace list, which shows top-level
+    runs only, but still counted in analytics totals forever.
+
+    `seen` also makes a cycle impossible to loop on, which the schema should
+    never produce but which would otherwise hang the request.
+    """
+    seen = set(run_ids)
+    frontier = list(run_ids)
+
+    while frontier:
+        children = []
+        for chunk in _chunks(frontier, _DELETE_BATCH_SIZE):
+            ph = ",".join(f":id{i}" for i in range(len(chunk)))
+            params = {f"id{i}": v for i, v in enumerate(chunk)}
+            children.extend(
+                r["id"] for r in conn.execute(
+                    text(f"SELECT id FROM runs WHERE parent_trace_id IN ({ph})"), params
+                ).mappings().fetchall()
+            )
+        frontier = [c for c in children if c not in seen]
+        seen.update(frontier)
+
+    return list(seen)
+
+
 def _cascade_delete_runs(conn: SAConnection, run_ids: list[str]) -> int:
-    """Delete tool_calls, turns, and runs for the given run ids, plus one
-    level of their sub-traces (parent_trace_id matches a given id). IN
-    clauses are chunked to stay under SQLite's bound-parameter ceiling when
-    deleting large id sets (e.g. delete-all-matching-filter). Returns the
-    number of run rows deleted."""
+    """Delete tool_calls, turns, and runs for the given run ids and every
+    sub-run beneath them, to any depth. IN clauses are chunked to stay under
+    SQLite's bound-parameter ceiling when deleting large id sets (e.g.
+    delete-all-matching-filter). Returns the number of run rows deleted."""
     if not run_ids:
         return 0
-    all_ids = list(run_ids)
-    for chunk in _chunks(run_ids, _DELETE_BATCH_SIZE):
-        ph = ",".join(f":id{i}" for i in range(len(chunk)))
-        params = {f"id{i}": v for i, v in enumerate(chunk)}
-        sub_ids = [
-            r["id"] for r in conn.execute(
-                text(f"SELECT id FROM runs WHERE parent_trace_id IN ({ph})"), params
-            ).mappings().fetchall()
-        ]
-        all_ids.extend(sub_ids)
+    all_ids = _descendant_run_ids(conn, run_ids)
 
     deleted = 0
     for chunk in _chunks(all_ids, _DELETE_BATCH_SIZE):
