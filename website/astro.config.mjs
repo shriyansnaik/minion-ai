@@ -4,7 +4,7 @@ import starlight from "@astrojs/starlight";
 
 // Canonical URL for sitemap/OG tags. Set SITE_URL in the Vercel project once the
 // real domain is attached; the default keeps local builds and previews working.
-const site = process.env.SITE_URL ?? "https://minion-ai.vercel.app";
+const site = process.env.SITE_URL ?? "https://minions-ai.vercel.app";
 
 const REPO = "https://github.com/shriyansnaik/minion-ai";
 

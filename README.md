@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <b><a href="https://minion-ai.vercel.app">Docs</a></b> ·
-  <a href="https://minion-ai.vercel.app/getting-started/installation/">Quickstart</a> ·
-  <a href="https://minion-ai.vercel.app/cookbook/">Cookbook</a> ·
-  <a href="https://minion-ai.vercel.app/changelog/">Changelog</a>
+  <b><a href="https://minions-ai.vercel.app">Docs</a></b> ·
+  <a href="https://minions-ai.vercel.app/getting-started/installation/">Quickstart</a> ·
+  <a href="https://minions-ai.vercel.app/cookbook/">Cookbook</a> ·
+  <a href="https://minions-ai.vercel.app/changelog/">Changelog</a>
 </p>
 
 <!-- DEMO VIDEO / GIF GOES HERE — see ROADMAP.md -->
@@ -87,25 +87,25 @@ Switching provider is just the model string:
 minions.Minion(model="anthropic/claude-opus-4", tools=[get_weather])
 ```
 
-Full matrix and failure modes: **[Provider support](https://minion-ai.vercel.app/reference/providers/)**.
+Full matrix and failure modes: **[Provider support](https://minions-ai.vercel.app/reference/providers/)**.
 
 ## Docs
 
-Everything lives at **[minion-ai.vercel.app](https://minion-ai.vercel.app)**:
+Everything lives at **[minions-ai.vercel.app](https://minions-ai.vercel.app)**:
 
 | | |
 | --- | --- |
-| [Getting started](https://minion-ai.vercel.app/getting-started/what-is-minion/) | Install, first agent, first trace |
-| [Guides](https://minion-ai.vercel.app/guides/tools/) | Tools, sub-agents, parallel tools, tracing, cost, the dashboard |
-| [Cookbook](https://minion-ai.vercel.app/cookbook/) | Complete runnable programs |
-| [Deployment](https://minion-ai.vercel.app/deployment/choosing-a-database/) | SQLite vs Postgres, self-hosting, remote tracing |
-| [Reference](https://minion-ai.vercel.app/reference/minion/) | `Minion(...)`, `init(...)`, the CLI, providers |
-| [Contributing](https://minion-ai.vercel.app/contributing/) | Repo layout, dev loop, migrations, releasing |
+| [Getting started](https://minions-ai.vercel.app/getting-started/what-is-minion/) | Install, first agent, first trace |
+| [Guides](https://minions-ai.vercel.app/guides/tools/) | Tools, sub-agents, parallel tools, tracing, cost, the dashboard |
+| [Cookbook](https://minions-ai.vercel.app/cookbook/) | Complete runnable programs |
+| [Deployment](https://minions-ai.vercel.app/deployment/choosing-a-database/) | SQLite vs Postgres, self-hosting, remote tracing |
+| [Reference](https://minions-ai.vercel.app/reference/minion/) | `Minion(...)`, `init(...)`, the CLI, providers |
+| [Contributing](https://minions-ai.vercel.app/contributing/) | Repo layout, dev loop, migrations, releasing |
 
 ## Contributing
 
 Issues and PRs welcome — see
-[Contributing](https://minion-ai.vercel.app/contributing/) for the repo layout
+[Contributing](https://minions-ai.vercel.app/contributing/) for the repo layout
 and the dev loop. Reports from **Tier 2 models** are especially useful: if you
 ran Minion on a model that isn't in the table above, both answers help.
 

@@ -1,6 +1,6 @@
 # Documentation
 
-**The docs live on the website: <https://minion-ai.vercel.app>**
+**The docs live on the website: <https://minions-ai.vercel.app>**
 
 They used to live here as loose markdown files. They are now a single Starlight
 site with navigation, search, and a changelog page generated from
@@ -11,13 +11,13 @@ them was wrong, so this folder is now a pointer.
 
 | Was | Now |
 | --- | --- |
-| `providers.md` | [Provider support](https://minion-ai.vercel.app/reference/providers/) |
-| `hosting.md` | [Self-hosting the server](https://minion-ai.vercel.app/deployment/self-hosting/) |
-| `remote-tracing.md` | [Remote tracing](https://minion-ai.vercel.app/deployment/remote-tracing/) |
-| `quickstart-mac.md` | [Team quickstart](https://minion-ai.vercel.app/deployment/team-quickstart/) |
-| `multi-agent.md` | [Sub-agents & specialists](https://minion-ai.vercel.app/guides/sub-agents/) |
-| `releasing.md` | [Releasing](https://minion-ai.vercel.app/contributing/releasing/) |
-| `publishing-to-pypi.md`, `publishing-the-image.md` | [Publishing setup](https://minion-ai.vercel.app/contributing/publishing/) |
+| `providers.md` | [Provider support](https://minions-ai.vercel.app/reference/providers/) |
+| `hosting.md` | [Self-hosting the server](https://minions-ai.vercel.app/deployment/self-hosting/) |
+| `remote-tracing.md` | [Remote tracing](https://minions-ai.vercel.app/deployment/remote-tracing/) |
+| `quickstart-mac.md` | [Team quickstart](https://minions-ai.vercel.app/deployment/team-quickstart/) |
+| `multi-agent.md` | [Sub-agents & specialists](https://minions-ai.vercel.app/guides/sub-agents/) |
+| `releasing.md` | [Releasing](https://minions-ai.vercel.app/contributing/releasing/) |
+| `publishing-to-pypi.md`, `publishing-the-image.md` | [Publishing setup](https://minions-ai.vercel.app/contributing/publishing/) |
 
 ## Editing the docs
 
@@ -34,5 +34,5 @@ npm run dev        # http://localhost:4321
 The changelog page is generated from the repo-root `CHANGELOG.md` on every
 `dev` and `build`. Edit that file, never `website/src/content/docs/changelog.md`.
 
-See [Contributing](https://minion-ai.vercel.app/contributing/) for the repo
+See [Contributing](https://minions-ai.vercel.app/contributing/) for the repo
 layout and the dev loop.

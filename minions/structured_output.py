@@ -22,7 +22,7 @@ from .models import MinionOutput
 
 log = logging.getLogger("minions.structured_output")
 
-DOCS_URL = "https://minion-ai.vercel.app/reference/providers/"
+DOCS_URL = "https://minions-ai.vercel.app/reference/providers/"
 
 
 class StructuredOutputError(RuntimeError):

@@ -5,13 +5,48 @@
  * the changelog is never hand-maintained in two places — CHANGELOG.md is the
  * only source of truth.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SOURCE = resolve(here, "../../CHANGELOG.md");
 const TARGET = resolve(here, "../src/content/docs/changelog.md");
+
+/**
+ * Walk up from the script looking for the repo's CHANGELOG.md, rather than
+ * assuming a fixed depth. Works from the website dir, the repo root, or
+ * wherever a CI runner decides to put things.
+ */
+function findChangelog() {
+  let dir = here;
+  for (let i = 0; i < 6; i++) {
+    const candidate = resolve(dir, "CHANGELOG.md");
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+const SOURCE = findChangelog();
+
+if (!SOURCE) {
+  // Almost always this one thing, so say it rather than making the reader guess.
+  console.error(
+    "\nchangelog: could not find CHANGELOG.md above " + here + "\n" +
+    "\n" +
+    "On Vercel this means the build can only see the `website/` directory.\n" +
+    "CHANGELOG.md lives at the repo root, one level up, and is the single\n" +
+    "source for the changelog page.\n" +
+    "\n" +
+    "Fix: Vercel project -> Settings -> Build and Deployment -> Root Directory\n" +
+    "     -> tick 'Include files outside of the Root Directory in the Build Step'\n" +
+    "\n" +
+    "Locally, run this from inside the repo.\n"
+  );
+  process.exit(1);
+}
 
 const raw = readFileSync(SOURCE, "utf8");
 

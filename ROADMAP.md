@@ -26,11 +26,17 @@ use **:5173** (vite proxies `/api` to 7337). After editing UI source, run
 
 **The queue**
 
-1. **Pick a domain and deploy the site.** `website/` is a full Astro + Starlight
-   site now (`cd website && npm install && npm run dev`). Two things are stubbed
-   on a placeholder: `SITE_URL` in `astro.config.mjs`, and every
-   `https://minion-ai.vercel.app` link in `README.md` / `docs/README.md`. Set the
-   real domain, then `vercel deploy`.
+1. **Deploy the site.** `website/` is a full Astro + Starlight site
+   (`cd website && npm install && npm run dev`; search only works in
+   `npm run build && npm run preview`, since Pagefind indexes built HTML).
+   Domain is `https://minions-ai.vercel.app`, already wired into
+   `astro.config.mjs`, `README.md` and `docs/README.md`.
+
+   **One-time Vercel setting, or the build fails:** Settings → Build and
+   Deployment → Root Directory → tick *"Include files outside of the Root
+   Directory in the Build Step"*. Root Directory is `website`, but the changelog
+   page is generated from the repo-root `CHANGELOG.md`, which is otherwise not
+   uploaded to the build.
 2. **Record the demo video.** Only Shriyans can. Drop the embed URL into
    `DEMO_VIDEO_EMBED_URL` in `website/src/config.ts` and it replaces the hero
    placeholder; add a GIF near the top of `README.md` at the marked comment.
