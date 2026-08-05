@@ -1,14 +1,56 @@
 import os
 import sys
 
+# ASCII only, deliberately: this text is printed to the console, and Windows
+# consoles default to the cp1252 codepage.
+USAGE = """minion - dashboard and trace viewer for minion-ai
+
+Usage:
+  minion serve [--port PORT] [--db-path PATH]   Start the dashboard server
+  minion --version                              Print the installed version
+  minion --help                                 Show this message
+
+Options for `serve`:
+  --port PORT      Port to listen on (default: 7337)
+  --db-path PATH   SQLite file to read/write (default: ~/.minion/traces.db)
+
+Running `minion` with no arguments is the same as `minion serve`.
+Docs: https://github.com/shriyansnaik/minion-ai
+"""
+
+HELP_FLAGS = ("-h", "--help", "help")
+VERSION_FLAGS = ("-V", "--version", "version")
+
+
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("minion-ai")
+    except PackageNotFoundError:
+        return "unknown (not installed as a package)"
+
 
 def main():
     args = sys.argv[1:]
+
+    if args and args[0] in HELP_FLAGS:
+        print(USAGE)
+        return
+    if args and args[0] in VERSION_FLAGS:
+        print(f"minion-ai {_version()}")
+        return
+
     if not args or args[0] == "serve":
-        _cmd_serve(args[1:] if args else [])
+        rest = args[1:] if args else []
+        # `minion serve --help` should explain itself, not silently boot a server.
+        if any(a in HELP_FLAGS for a in rest):
+            print(USAGE)
+            return
+        _cmd_serve(rest)
     else:
-        print(f"minion: unknown command '{args[0]}'")
-        print("Usage: minion serve [--port PORT] [--db-path PATH]")
+        print(f"minion: unknown command '{args[0]}'\n")
+        print(USAGE)
         sys.exit(1)
 
 

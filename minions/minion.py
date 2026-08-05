@@ -1,14 +1,28 @@
 import inspect
 import json
+import logging
 import time
 import litellm
 import docstring_parser
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from typing import Callable
 
 from .models import Tool, ToolArg, ToolCall, MinionOutput, RunResult
+from .structured_output import (
+    StructuredOutputError,
+    is_structured_output_error,
+    native_schema_supported,
+    parse_output,
+    prompt_schema_section,
+    unsupported_model_error,
+)
 
 litellm.drop_params = True
+
+log = logging.getLogger("minions.minion")
+
+STRUCTURED_OUTPUT_MODES = ("auto", "native", "prompt")
 
 MINION_BASE_PROMPT = """#Role
 You are Minion, a powerful AI agent. Given user input, produce the best possible output using your available tools.
@@ -100,7 +114,16 @@ class Minion:
         max_turns: int = 10,
         name: str = None,
         description: str = None,
+        structured_output: str = "auto",
+        max_parse_retries: int = 2,
     ):
+        if structured_output not in STRUCTURED_OUTPUT_MODES:
+            raise ValueError(
+                f"structured_output must be one of {STRUCTURED_OUTPUT_MODES}, "
+                f"got {structured_output!r}"
+            )
+        self.structured_output = structured_output
+        self.max_parse_retries = max_parse_retries
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.secondary_model = secondary_model
@@ -286,7 +309,82 @@ class Minion:
         latency_ms = int((time.monotonic() - start) * 1000)
         return {"tool": tool, "args": args, "output": output, "latency_ms": latency_ms}
 
-    def _build_instructions(self) -> str:
+    def _use_native_schema(self) -> bool:
+        """Whether to ask the provider to enforce the schema for this run.
+
+        `auto` trusts LiteLLM's capability table; `native` and `prompt` are the
+        escape hatches for when that table is wrong in either direction.
+        """
+        if self.structured_output == "native":
+            return True
+        if self.structured_output == "prompt":
+            return False
+        return native_schema_supported(self.model)
+
+    @staticmethod
+    def _sum_usage(usages: list) -> SimpleNamespace:
+        """Total token usage across every attempt made for one turn.
+
+        A reparse retry is a real extra API call, so its tokens belong in the
+        turn that paid for them — otherwise the fallback path silently
+        under-reports cost.
+        """
+        return SimpleNamespace(
+            prompt_tokens=sum(getattr(u, "prompt_tokens", 0) or 0 for u in usages if u),
+            completion_tokens=sum(getattr(u, "completion_tokens", 0) or 0 for u in usages if u),
+        )
+
+    def _complete(self, messages: list, use_native: bool) -> tuple[MinionOutput, SimpleNamespace]:
+        """Get one validated `MinionOutput` from the model.
+
+        On the native path a single call either works or the provider rejects
+        it. On the prompted path the schema is only a request, so a malformed
+        reply is fed back to the model and retried a bounded number of times
+        before giving up.
+        """
+        usages = []
+        attempts = list(messages)
+        last_error = None
+
+        for attempt in range(self.max_parse_retries + 1):
+            try:
+                response = litellm.completion(
+                    model=self.model,
+                    messages=attempts,
+                    reasoning_effort=self.reasoning_effort,
+                    # json_object mode is a weaker guarantee than a schema, but
+                    # it stops the model wrapping the object in prose.
+                    # `drop_params` removes it for models that reject it outright.
+                    response_format=MinionOutput if use_native else {"type": "json_object"},
+                )
+            except Exception as e:
+                if is_structured_output_error(e):
+                    raise unsupported_model_error(self.model, e) from e
+                raise
+
+            usages.append(getattr(response, "usage", None))
+            content = response.choices[0].message.content
+
+            try:
+                return parse_output(content), self._sum_usage(usages)
+            except ValueError as e:
+                last_error = e
+                if attempt == self.max_parse_retries:
+                    break
+                log.warning(
+                    "%s returned an unparseable envelope (attempt %d/%d); re-prompting",
+                    self.model, attempt + 1, self.max_parse_retries + 1,
+                )
+                # Show the model its own bad reply next to the complaint —
+                # correcting a visible mistake works better than restating rules.
+                attempts = attempts + [
+                    {"role": "assistant", "content": content or ""},
+                    {"role": "user", "content": str(e)},
+                ]
+
+        raise unsupported_model_error(self.model, last_error)
+
+    def _build_instructions(self, use_native: bool = True) -> str:
         tool_schemas = "\n".join([str(tool.schema) for tool in self.parsed_tools])
 
         if self.sub_minions:
@@ -311,6 +409,9 @@ class Minion:
         )
         if self.system_prompt:
             instructions += f"\n\n## Special Instructions from User\n{self.system_prompt}"
+        if not use_native:
+            # Nothing is enforcing the envelope server-side, so spell it out.
+            instructions += prompt_schema_section()
         return instructions
 
     def __call__(
@@ -334,7 +435,8 @@ class Minion:
         from .tracing import RunTracer
 
         tracer = RunTracer(parent_trace_id=parent_trace_id)
-        run = _Run(tracer=tracer, instructions=self._build_instructions())
+        use_native = self._use_native_schema()
+        run = _Run(tracer=tracer, instructions=self._build_instructions(use_native))
         run.add(message=input, message_type="user")
 
         tracer.start(
@@ -354,14 +456,25 @@ class Minion:
                 ]
 
                 with tracer.time_turn():
-                    response = litellm.completion(
-                        model=self.model,
-                        messages=messages,
-                        response_format=MinionOutput,
-                        reasoning_effort=self.reasoning_effort,
-                    )
+                    try:
+                        output, usage = self._complete(messages, use_native)
+                    except StructuredOutputError:
+                        # LiteLLM's capability table said this model enforces
+                        # schemas and the provider disagreed. In `auto` that's a
+                        # reason to drop to the prompted path, not to fail the
+                        # run; the user asked for "whatever works".
+                        if not (use_native and self.structured_output == "auto"):
+                            raise
+                        log.warning(
+                            "%s was reported as supporting native JSON schemas but rejected "
+                            "one; falling back to the prompted envelope for this run",
+                            self.model,
+                        )
+                        use_native = False
+                        run.instructions = self._build_instructions(use_native)
+                        messages[0]["content"] = run.instructions
+                        output, usage = self._complete(messages, use_native)
 
-                output = MinionOutput.model_validate_json(response.choices[0].message.content)
                 label = self.name or self.model
                 print(f"===== {label} =====")
                 print(output, end="\n\n")
@@ -391,7 +504,7 @@ class Minion:
                         final_output = tool_output
                         break
 
-                tracer.record_turn(turn_number, output.next_thought, response.usage)
+                tracer.record_turn(turn_number, output.next_thought, usage)
 
                 if finished:
                     tracer.finish(final_output)
