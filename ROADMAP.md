@@ -26,29 +26,27 @@ use **:5173** (vite proxies `/api` to 7337). After editing UI source, run
 
 **The queue**
 
-1. **Deploy the site.** `website/` is a full Astro + Starlight site
-   (`cd website && npm install && npm run dev`; search only works in
-   `npm run build && npm run preview`, since Pagefind indexes built HTML).
-   Domain is `https://minions-ai.vercel.app`, already wired into
-   `astro.config.mjs`, `README.md` and `docs/README.md`.
+*Site is live: <https://minions-ai.vercel.app> — auto-deploys on every push to
+`main`. Locally, `cd website && npm run dev`; search only works under
+`npm run build && npm run preview`, since Pagefind indexes built HTML.*
 
-   **One-time Vercel setting, or the build fails:** Settings → Build and
-   Deployment → Root Directory → tick *"Include files outside of the Root
-   Directory in the Build Step"*. Root Directory is `website`, but the changelog
-   page is generated from the repo-root `CHANGELOG.md`, which is otherwise not
-   uploaded to the build.
-2. **Record the demo video.** Only Shriyans can. Drop the embed URL into
-   `DEMO_VIDEO_EMBED_URL` in `website/src/config.ts` and it replaces the hero
-   placeholder; add a GIF near the top of `README.md` at the marked comment.
-3. **Verify the Tier 3 fallback against a live model.** Implemented and covered
-   by offline tests, but never run against a real `groq/llama-3.3-70b-versatile`.
-   Cheap on Groq — worth doing before the claim ships.
-4. **Run the Tier 1 smoke test.** `tests/smoke_providers.py` is written and
-   dry-run clean. Needs paid keys; see the deferred note below.
-5. **Fix the one-level delete cascade** — a known data-integrity bug, small,
+1. **Verify the Tier 3 fallback against a live model.** Implemented, 19 offline
+   tests pass, but never run against a real `groq/llama-3.3-70b-versatile`. The
+   docs currently claim it works on stubbed evidence alone. Cheap on Groq — do
+   this first.
+2. **Fix the one-level delete cascade** — known data-integrity bug, small,
    detailed under "Bugs found while writing the docs" below. Deleting a run
    orphans its *grandchild* sub-runs, which then skew analytics forever.
-6. Tag and publish v0.2.0.
+3. **Replace the dashboard mock with a real screenshot.** The landing page shows
+   a hand-built CSS mock of the trace viewer. Needs a populated `minion serve`
+   and a screen capture.
+4. **Record the demo video.** Only Shriyans can. Drop the embed URL into
+   `DEMO_VIDEO_EMBED_URL` in `website/src/config.ts` and it replaces the hero
+   placeholder; add a GIF near the top of `README.md` at the marked comment.
+5. **Run the Tier 1 smoke test.** `tests/smoke_providers.py` is written and
+   dry-run clean. Needs paid keys; see the deferred note below. **This is the
+   launch gate.**
+6. Tag and publish v0.2.0, then launch.
 
 **Deliberately deferred to immediately pre-launch**
 
@@ -155,7 +153,12 @@ Everything a stranger arriving from Product Hunt needs in order to succeed.
 - [x] Docs section (structure below)
 - [x] Public changelog page, generated from `CHANGELOG.md` at build time
 - [ ] Real screenshot of `minion serve` to replace the CSS mock
-- [ ] Pick a domain, set `SITE_URL`, and deploy
+- [x] **Live at <https://minions-ai.vercel.app>**, auto-deploying from `main`.
+      Vercel Root Directory is `website` with *"Include source files outside of
+      the Root Directory in the Build Step"* ticked — the changelog page is
+      generated from the repo-root `CHANGELOG.md`, so the build fails without it.
+      Note `vercel redeploy` reuses a previous deployment's settings, so test any
+      settings change with a fresh deployment, not a redeploy.
 
 **Docs — the main selling point, so treat them as a feature**
 
