@@ -29,26 +29,56 @@ function findChangelog() {
   return null;
 }
 
-const SOURCE = findChangelog();
+/**
+ * Fetch CHANGELOG.md from the repo at the exact commit being built.
+ *
+ * Vercel's Root Directory is `website`, so unless "Include source files outside
+ * of the Root Directory in the Build Step" is ticked, nothing above it is
+ * uploaded and the repo-root CHANGELOG.md is simply not on disk. Rather than
+ * depend on that setting -- or keep a second copy of the changelog in here,
+ * which is exactly the drift the generated page exists to prevent -- read it
+ * over HTTP, pinned to this deployment's commit. Pinning is what preserves the
+ * guarantee: the page cannot show a changelog other than the one that shipped.
+ *
+ * Needs the repo to be publicly readable. Returns null if it can't fetch.
+ */
+async function fetchChangelog() {
+  const owner = process.env.VERCEL_GIT_REPO_OWNER;
+  const slug = process.env.VERCEL_GIT_REPO_SLUG;
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (!owner || !slug || !sha) return null;
 
-if (!SOURCE) {
-  // Almost always this one thing, so say it rather than making the reader guess.
+  const url = `https://raw.githubusercontent.com/${owner}/${slug}/${sha}/CHANGELOG.md`;
+  console.log(`changelog: not on disk, fetching ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`changelog: fetch returned ${response.status} ${response.statusText}`);
+      return null;
+    }
+    return await response.text();
+  } catch (e) {
+    console.error(`changelog: fetch failed - ${e.message}`);
+    return null;
+  }
+}
+
+const SOURCE = findChangelog();
+if (SOURCE) console.log(`changelog: reading ${SOURCE}`);
+const raw = SOURCE ? readFileSync(SOURCE, "utf8") : await fetchChangelog();
+
+if (raw === null) {
   console.error(
-    "\nchangelog: could not find CHANGELOG.md above " + here + "\n" +
+    "\nchangelog: could not read CHANGELOG.md, from disk or over HTTP.\n" +
     "\n" +
-    "On Vercel this means the build can only see the `website/` directory.\n" +
-    "CHANGELOG.md lives at the repo root, one level up, and is the single\n" +
-    "source for the changelog page.\n" +
-    "\n" +
-    "Fix: Vercel project -> Settings -> Build and Deployment -> Root Directory\n" +
-    "     -> tick 'Include files outside of the Root Directory in the Build Step'\n" +
-    "\n" +
-    "Locally, run this from inside the repo.\n"
+    "It lives at the repo root and is the single source for the changelog page.\n" +
+    "Locally: run this from inside the repo.\n" +
+    "On Vercel: tick Settings -> Build and Deployment -> Root Directory ->\n" +
+    "  'Include source files outside of the Root Directory in the Build Step',\n" +
+    "  which puts the file on disk and skips the fetch entirely.\n"
   );
   process.exit(1);
 }
-
-const raw = readFileSync(SOURCE, "utf8");
 
 // Drop the "# Changelog" heading and the Keep a Changelog blurb under it —
 // Starlight renders the page title itself, and the blurb is restated below in
