@@ -1,0 +1,84 @@
+/* Minion brand theme for Starlight.
+   Brand purple is #5B53E8; the dark palette is tuned to the near-black used on
+   the landing page so the docs and the marketing page read as one site. */
+
+:root {
+  --minion-purple: #5b53e8;
+  --minion-purple-bright: #7d76ff;
+}
+
+/* Dark theme (default) */
+:root {
+  --sl-color-accent-low: #232048;
+  --sl-color-accent: #5b53e8;
+  --sl-color-accent-high: #c3bfff;
+
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #ececf3;
+  --sl-color-gray-2: #c2c2d0;
+  --sl-color-gray-3: #8b8ba0;
+  --sl-color-gray-4: #55556a;
+  --sl-color-gray-5: #35354a;
+  --sl-color-gray-6: #22222f;
+  --sl-color-gray-7: #191922;
+  --sl-color-black: #0b0b11;
+
+  --sl-color-bg: #0b0b11;
+  --sl-color-bg-nav: rgba(11, 11, 17, 0.85);
+  --sl-color-bg-sidebar: #0b0b11;
+}
+
+/* Light theme */
+:root[data-theme="light"] {
+  --sl-color-accent-low: #dedcff;
+  --sl-color-accent: #4f46e0;
+  --sl-color-accent-high: #241f6b;
+
+  --sl-color-white: #16161d;
+  --sl-color-gray-1: #24242e;
+  --sl-color-gray-2: #3f3f4d;
+  --sl-color-gray-3: #6a6a7d;
+  --sl-color-gray-4: #9a9aad;
+  --sl-color-gray-5: #d0d0dc;
+  --sl-color-gray-6: #eaeaf2;
+  --sl-color-gray-7: #f4f4f9;
+  --sl-color-black: #ffffff;
+
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: rgba(255, 255, 255, 0.85);
+  --sl-color-bg-sidebar: #ffffff;
+}
+
+/* Sticky, translucent header — matches the landing page chrome. */
+.header {
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--sl-color-gray-6);
+}
+
+/* The wordmark carries the product name, so give it room to breathe. */
+.site-title img {
+  height: 1.6rem;
+  width: auto;
+}
+
+/* Slightly tighter, more readable prose than the Starlight default. */
+.sl-markdown-content {
+  --sl-text-code: 0.9em;
+}
+
+.sl-markdown-content :is(h2, h3) {
+  letter-spacing: -0.01em;
+}
+
+/* Tables in the reference pages get wide; let them scroll rather than
+   forcing the page to. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Reference tables read better with the argument name unwrapped. */
+.sl-markdown-content td:first-child code {
+  white-space: nowrap;
+}

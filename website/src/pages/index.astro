@@ -1,0 +1,686 @@
+---
+import { Code } from "astro:components";
+import TraceMock from "../components/TraceMock.astro";
+import {
+  REPO_URL,
+  PYPI_URL,
+  DOCS_ENTRY,
+  DEMO_VIDEO_EMBED_URL,
+} from "../config";
+import logoDark from "../assets/logo-dark.svg";
+
+const title = "Minion — a lightweight agentic framework with observability baked in";
+const description =
+  "Build AI agents that think, use tools, and delegate to sub-agents — then see every turn, tool call, token and dollar in a local dashboard.";
+
+const quickstart = `import minions
+
+def get_weather(city: str) -> str:
+    """Get the current weather for a city.
+
+    Args:
+        city: Name of the city.
+    """
+    return f"{city}: 22°C, clear"
+
+minions.init(tracing=True, project="demo")
+
+agent = minions.Minion(
+    model="openai/gpt-4o",
+    tools=[get_weather],
+)
+
+print(agent("Should I take a jacket in Oslo today?"))`;
+
+const tracingSample = `minions.init(
+    tracing=True,
+    project="support-bot",
+)
+
+agent(
+    "Refund order 8812",
+    metadata={"ticket_id": "T-4471", "tier": "pro"},
+)`;
+
+const subAgentSample = `researcher = minions.Minion(
+    model="openai/gpt-4o",
+    tools=[search_web],
+    name="researcher",
+    description="Finds and summarises sources on a topic.",
+)
+
+lead = minions.Minion(
+    model="openai/gpt-4o",
+    tools=[write_file],
+    sub_minions=[researcher],
+    parallel_tools=True,
+)`;
+
+const features = [
+  {
+    title: "Tools are just functions",
+    body: "A docstring and type hints are the schema. No decorators, no registry, no JSON to hand-write.",
+    href: "/guides/tools/",
+  },
+  {
+    title: "Sub-agents that stay cheap",
+    body: "Delegate big jobs to generic workers on a smaller model, or to named specialists you compose yourself.",
+    href: "/guides/sub-agents/",
+  },
+  {
+    title: "Parallel tool calls",
+    body: "Run a turn's independent calls concurrently. Each one is timed on its own, so latency stays honest.",
+    href: "/guides/parallel-tools/",
+  },
+  {
+    title: "Traces, locally, by default",
+    body: "One flag records every run, turn and tool call to SQLite. No account, no vendor, no egress.",
+    href: "/guides/tracing/",
+  },
+  {
+    title: "Know what it cost",
+    body: "Per-turn and per-run cost from a built-in price table for 145 models, plus your own per-project overrides.",
+    href: "/guides/cost-tracking/",
+  },
+  {
+    title: "A dashboard you run",
+    body: "`minion serve` — filter, drill into any turn, and roll spend up by day or by model.",
+    href: "/guides/dashboard/",
+  },
+];
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Minion" />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+
+  <body>
+    <header class="nav">
+      <a class="brand" href="/">
+        <img src={logoDark.src} alt="Minion" height="24" />
+      </a>
+      <nav>
+        <a href={DOCS_ENTRY}>Docs</a>
+        <a href="/cookbook/">Cookbook</a>
+        <a href="/changelog/">Changelog</a>
+        <a href={REPO_URL} target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">pip install minion-ai</p>
+        <h1>
+          Build agents you can<br /><span class="grad">actually see inside</span>
+        </h1>
+        <p class="sub">
+          Minion is a small Python framework for agents that think, call tools,
+          and delegate to sub-agents. Turn on tracing and every run, turn, tool
+          call, token and dollar lands in a local dashboard you own.
+        </p>
+
+        <div class="cta">
+          <a class="btn primary" href={DOCS_ENTRY}>Get started</a>
+          <a class="btn" href={REPO_URL} target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+        </div>
+
+        <div class="install">
+          <code>pip install minion-ai</code>
+        </div>
+      </section>
+
+      <section class="media">
+        {
+          DEMO_VIDEO_EMBED_URL ? (
+            <div class="video">
+              <iframe
+                src={DEMO_VIDEO_EMBED_URL}
+                title="Minion demo"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                allowfullscreen
+              />
+            </div>
+          ) : (
+            <TraceMock />
+          )
+        }
+      </section>
+
+      <section class="band">
+        <div class="split">
+          <div>
+            <h2>An agent is a function and a few tools</h2>
+            <p>
+              Pass plain Python functions. Minion reads the signature and the
+              docstring to build the tool schema, so the thing the model sees
+              and the thing that runs can never drift apart.
+            </p>
+            <a class="more" href={DOCS_ENTRY}>Read the quickstart →</a>
+          </div>
+          <Code code={quickstart} lang="python" theme="github-dark-default" />
+        </div>
+      </section>
+
+      <section class="band alt">
+        <div class="split reverse">
+          <div>
+            <h2>Delegate without losing the thread</h2>
+            <p>
+              Give a minion <code>allow_sub_agents=True</code> and it splits
+              large jobs across generic workers — optionally on a cheaper
+              <code>secondary_model</code>. Or hand it named specialists and it
+              routes to them by name. Sub-agent traces nest under the parent
+              run, so the tree stays readable.
+            </p>
+            <a class="more" href="/guides/sub-agents/">Sub-agents &amp; specialists →</a>
+          </div>
+          <Code code={subAgentSample} lang="python" theme="github-dark-default" />
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="split">
+          <div>
+            <h2>Observability that costs one line</h2>
+            <p>
+              <code>tracing=True</code> writes to SQLite in your home directory.
+              Tag runs with metadata and filter on it later. Tracing never
+              raises — if the trace store is unreachable, the push is skipped
+              and your agent keeps running.
+            </p>
+            <a class="more" href="/guides/tracing/">Tracing &amp; metadata →</a>
+          </div>
+          <Code code={tracingSample} lang="python" theme="github-dark-default" />
+        </div>
+      </section>
+
+      <section class="features">
+        <h2 class="center">What you get</h2>
+        <div class="grid">
+          {
+            features.map((f) => (
+              <a class="card" href={f.href}>
+                <h3>{f.title}</h3>
+                <p>{f.body}</p>
+              </a>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="providers">
+        <h2 class="center">Honest about models</h2>
+        <p class="center sub narrow">
+          Minion asks the model for a strict JSON envelope every turn, so it
+          works with any model whose provider supports native JSON-schema
+          structured output — and not with the ones that don't. Three tiers,
+          stated plainly:
+        </p>
+        <div class="tiers">
+          <div class="tier t1">
+            <span class="tag">Tier 1 · Supported</span>
+            <p>OpenAI, Anthropic, Gemini. Developed against and tested before every release.</p>
+          </div>
+          <div class="tier t2">
+            <span class="tag">Tier 2 · Should work</span>
+            <p>Any other LiteLLM model with native schema output — Groq's <code>gpt-oss-120b</code>, Azure, vLLM.</p>
+          </div>
+          <div class="tier t3">
+            <span class="tag">Tier 3 · Not supported</span>
+            <p>Models without schema output. They fail on turn one; it isn't a degraded mode.</p>
+          </div>
+        </div>
+        <p class="center">
+          <a class="more" href="/reference/providers/">Full provider support matrix →</a>
+        </p>
+      </section>
+
+      <section class="final">
+        <h2>Start with one file</h2>
+        <div class="install big">
+          <code>pip install minion-ai</code>
+        </div>
+        <div class="cta">
+          <a class="btn primary" href={DOCS_ENTRY}>Read the docs</a>
+          <a class="btn" href="/cookbook/">Browse the cookbook</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a href={REPO_URL} target="_blank" rel="noopener">GitHub</a>
+      <a href={PYPI_URL} target="_blank" rel="noopener">PyPI</a>
+      <a href={DOCS_ENTRY}>Docs</a>
+      <a href="/changelog/">Changelog</a>
+    </footer>
+
+    <style is:global>
+      :root {
+        --bg: #09090d;
+        --fg: #ffffff;
+        --muted: #8b8ba0;
+        --dim: #55556a;
+        --line: #1d1d28;
+        --purple: #5b53e8;
+        --purple-bright: #a5a0ff;
+        --panel: #101018;
+        --sl-color-gray-1: #ececf3;
+        --sl-color-gray-2: #c2c2d0;
+        --sl-color-gray-3: #8b8ba0;
+        --sl-color-gray-4: #55556a;
+        --sl-color-gray-5: #2a2a3a;
+        --sl-color-gray-6: #1a1a24;
+        --sl-color-gray-7: #101018;
+        --sl-color-white: #ffffff;
+        --sl-color-accent-low: #232048;
+        --sl-color-accent-high: #c3bfff;
+        --minion-purple-bright: #a5a0ff;
+      }
+
+      * ,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.6;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      }
+    </style>
+
+    <style>
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        max-width: 68rem;
+        margin: 0 auto;
+        padding: 1.25rem 1.5rem;
+      }
+
+      .brand img {
+        display: block;
+        height: 24px;
+        width: auto;
+      }
+
+      .nav nav {
+        display: flex;
+        gap: 1.5rem;
+      }
+
+      .nav nav a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.88rem;
+        transition: color 0.15s ease;
+      }
+
+      .nav nav a:hover {
+        color: #fff;
+      }
+
+      main {
+        max-width: 68rem;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+      }
+
+      .hero {
+        text-align: center;
+        padding: 5rem 0 3rem;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        color: var(--purple-bright);
+        border: 1px solid rgba(91, 83, 232, 0.35);
+        background: rgba(91, 83, 232, 0.08);
+        padding: 0.35rem 0.85rem;
+        border-radius: 999px;
+        margin: 0 0 1.75rem;
+      }
+
+      h1 {
+        font-size: clamp(2.2rem, 6vw, 3.75rem);
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+        font-weight: 700;
+        margin: 0 0 1.25rem;
+      }
+
+      .grad {
+        background: linear-gradient(100deg, #8079ff, #5b53e8 60%, #4b8bff);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .sub {
+        color: var(--muted);
+        font-size: 1.06rem;
+        max-width: 40rem;
+        margin: 0 auto 2rem;
+      }
+
+      .narrow {
+        max-width: 36rem;
+      }
+
+      .cta {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 0.7rem 1.35rem;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        color: #e7e7f0;
+        text-decoration: none;
+        font-size: 0.92rem;
+        font-weight: 500;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .btn:hover {
+        border-color: #3a3a52;
+        background: #14141d;
+      }
+
+      .btn.primary {
+        background: var(--purple);
+        border-color: var(--purple);
+        color: #fff;
+      }
+
+      .btn.primary:hover {
+        background: #6a62f0;
+        border-color: #6a62f0;
+      }
+
+      .install {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 8px;
+        padding: 0.6rem 1rem;
+      }
+
+      .install code {
+        font-size: 0.88rem;
+        color: #d7d7e6;
+      }
+
+      .install code::before {
+        content: "$ ";
+        color: var(--dim);
+      }
+
+      .install.big {
+        margin: 0 auto 1.75rem;
+        display: flex;
+        width: max-content;
+        padding: 0.8rem 1.4rem;
+      }
+
+      .media {
+        margin: 1rem auto 5rem;
+        max-width: 52rem;
+      }
+
+      .video {
+        position: relative;
+        padding-bottom: 56.25%;
+        height: 0;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+      }
+
+      .video iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      .band {
+        padding: 4rem 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3rem;
+        align-items: center;
+      }
+
+      .split.reverse > div:first-child {
+        order: 2;
+      }
+
+      .split h2,
+      .center {
+        letter-spacing: -0.02em;
+      }
+
+      h2 {
+        font-size: 1.75rem;
+        line-height: 1.2;
+        margin: 0 0 0.85rem;
+        letter-spacing: -0.02em;
+      }
+
+      .split p {
+        color: var(--muted);
+        margin: 0 0 1.1rem;
+      }
+
+      .split code,
+      .tier code {
+        background: #17172130;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 0.08em 0.35em;
+        font-size: 0.86em;
+        color: #c9c6ff;
+      }
+
+      .more {
+        color: var(--purple-bright);
+        text-decoration: none;
+        font-size: 0.92rem;
+        font-weight: 500;
+      }
+
+      .more:hover {
+        text-decoration: underline;
+      }
+
+      .center {
+        text-align: center;
+      }
+
+      .features {
+        padding: 4rem 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .features h2 {
+        margin-bottom: 2rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        display: block;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 10px;
+        padding: 1.4rem;
+        text-decoration: none;
+        transition:
+          border-color 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .card:hover {
+        border-color: #3a3a52;
+        transform: translateY(-2px);
+      }
+
+      .card h3 {
+        margin: 0 0 0.4rem;
+        font-size: 1rem;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .providers {
+        padding: 4rem 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .tiers {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+        gap: 1rem;
+        margin: 2rem 0;
+      }
+
+      .tier {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1.25rem;
+        background: var(--panel);
+      }
+
+      .tier p {
+        margin: 0.5rem 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .tag {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        font-weight: 600;
+      }
+
+      .t1 .tag {
+        color: #3ddc97;
+      }
+
+      .t2 .tag {
+        color: #e2b34a;
+      }
+
+      .t3 .tag {
+        color: #e0656f;
+      }
+
+      .final {
+        text-align: center;
+        padding: 5rem 0 6rem;
+        border-top: 1px solid var(--line);
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        display: flex;
+        gap: 2rem;
+        justify-content: center;
+        padding: 2rem 1.5rem 3rem;
+      }
+
+      footer a {
+        color: var(--dim);
+        text-decoration: none;
+        font-size: 0.8rem;
+      }
+
+      footer a:hover {
+        color: #999;
+      }
+
+      :global(.astro-code) {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1.1rem 1.2rem;
+        font-size: 0.82rem;
+        line-height: 1.55;
+        overflow-x: auto;
+        margin: 0;
+      }
+
+      @media (max-width: 46rem) {
+        .split,
+        .split.reverse > div:first-child {
+          grid-template-columns: 1fr;
+          order: 0;
+        }
+
+        .hero {
+          padding-top: 3rem;
+        }
+
+        .nav nav {
+          gap: 1rem;
+        }
+      }
+    </style>
+  </body>
+</html>

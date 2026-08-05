@@ -1,0 +1,227 @@
+---
+/**
+ * A CSS mock of the trace viewer, used on the landing page until a real
+ * screenshot of `minion serve` is dropped in. It is deliberately schematic —
+ * it shows the shape of the data (run → turns → tool calls, with latency,
+ * tokens and cost) rather than pretending to be a screenshot.
+ */
+---
+
+<div class="mock" role="img" aria-label="The Minion dashboard showing a run broken into turns and tool calls, with latency, tokens and cost">
+  <div class="chrome">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="url">localhost:7337</span>
+  </div>
+
+  <div class="body">
+    <div class="run">
+      <div class="run-head">
+        <span class="badge ok">success</span>
+        <span class="run-title">Summarise every file in /reports</span>
+      </div>
+      <div class="run-stats">
+        <span><b>4</b> turns</span>
+        <span><b>12</b> tool calls</span>
+        <span><b>18,402</b> tokens</span>
+        <span><b>6.4s</b></span>
+        <span class="cost"><b>$0.0231</b></span>
+      </div>
+    </div>
+
+    <ul class="turns">
+      <li>
+        <div class="turn">
+          <span class="n">1</span>
+          <span class="thought">Let me see what is in the reports directory…</span>
+          <span class="meta">312ms · $0.0018</span>
+        </div>
+        <ul class="tools">
+          <li><code>list_files</code><span class="ms">4ms</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="turn">
+          <span class="n">2</span>
+          <span class="thought">Twelve files — I will split these across sub-agents.</span>
+          <span class="meta">1,246ms · $0.0042</span>
+        </div>
+        <ul class="tools">
+          <li><code>_spawn_sub_minion</code><span class="ms">1,204ms</span></li>
+          <li><code>_spawn_sub_minion</code><span class="ms">1,180ms</span></li>
+          <li><code>_spawn_sub_minion</code><span class="ms">1,246ms</span></li>
+        </ul>
+      </li>
+      <li>
+        <div class="turn">
+          <span class="n">3</span>
+          <span class="thought">I have every summary; let me write the final answer.</span>
+          <span class="meta">890ms · $0.0071</span>
+        </div>
+        <ul class="tools">
+          <li><code>_finish</code><span class="ms">0ms</span></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<style>
+  .mock {
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--sl-color-gray-7);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.6);
+    text-align: left;
+  }
+
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    background: var(--sl-color-gray-6);
+  }
+
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--sl-color-gray-4);
+    display: block;
+  }
+
+  .url {
+    margin-left: 0.75rem;
+    font-size: 0.72rem;
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono, ui-monospace, monospace);
+  }
+
+  .body {
+    padding: 1rem 1.1rem 1.2rem;
+  }
+
+  .run-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .badge {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+
+  .badge.ok {
+    color: #3ddc97;
+    background: rgba(61, 220, 151, 0.12);
+    border: 1px solid rgba(61, 220, 151, 0.3);
+  }
+
+  .run-title {
+    font-weight: 600;
+    color: var(--sl-color-white);
+    font-size: 0.92rem;
+  }
+
+  .run-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.1rem;
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-3);
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--sl-color-gray-6);
+  }
+
+  .run-stats b {
+    color: var(--sl-color-gray-1);
+    font-weight: 600;
+  }
+
+  .run-stats .cost b {
+    color: var(--minion-purple-bright);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .turns > li {
+    padding-top: 0.85rem;
+  }
+
+  .turn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  .n {
+    flex: none;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 6px;
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent-high);
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+  }
+
+  .thought {
+    flex: 1;
+    color: var(--sl-color-gray-2);
+    font-size: 0.85rem;
+  }
+
+  .meta {
+    flex: none;
+    font-size: 0.72rem;
+    color: var(--sl-color-gray-4);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tools {
+    margin: 0.4rem 0 0 2rem;
+    border-left: 1px solid var(--sl-color-gray-5);
+  }
+
+  .tools li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.22rem 0 0.22rem 0.85rem;
+  }
+
+  .tools code {
+    font-size: 0.76rem;
+    color: var(--sl-color-gray-1);
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .ms {
+    font-size: 0.7rem;
+    color: var(--sl-color-gray-4);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 30rem) {
+    .thought {
+      display: none;
+    }
+  }
+</style>

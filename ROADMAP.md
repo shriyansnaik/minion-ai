@@ -26,17 +26,23 @@ use **:5173** (vite proxies `/api` to 7337). After editing UI source, run
 
 **The queue**
 
-1. **Commit Phase 0.** The working tree holds finished, verified work: `parallel_tools`,
-   per-tool latency, per-turn cost, the trace-viewer rework, the Windows cp1252 fix,
-   the `minion serve` rename, `ROADMAP.md`, `docs/providers.md`. Then tag v0.1.4.
-2. **Reword the provider claim** in README + website to the tiered model already
-   written in [docs/providers.md](docs/providers.md). Small, and it removes the
-   biggest credibility risk at launch.
-3. **Build the website** — landing + docs + changelog page. Biggest chunk of Phase 1,
-   and the docs are the selling point. Claude builds this; leave a placeholder slot
-   for the video.
-4. Then the Tier 3 fallback, Groq prices, and the structured-output error message.
-5. **Write the Tier 1 smoke test** *(script it now, run it last — see below)*.
+1. **Pick a domain and deploy the site.** `website/` is a full Astro + Starlight
+   site now (`cd website && npm install && npm run dev`). Two things are stubbed
+   on a placeholder: `SITE_URL` in `astro.config.mjs`, and every
+   `https://minion-ai.vercel.app` link in `README.md` / `docs/README.md`. Set the
+   real domain, then `vercel deploy`.
+2. **Record the demo video.** Only Shriyans can. Drop the embed URL into
+   `DEMO_VIDEO_EMBED_URL` in `website/src/config.ts` and it replaces the hero
+   placeholder; add a GIF near the top of `README.md` at the marked comment.
+3. **Verify the Tier 3 fallback against a live model.** Implemented and covered
+   by offline tests, but never run against a real `groq/llama-3.3-70b-versatile`.
+   Cheap on Groq — worth doing before the claim ships.
+4. **Run the Tier 1 smoke test.** `tests/smoke_providers.py` is written and
+   dry-run clean. Needs paid keys; see the deferred note below.
+5. **Fix the one-level delete cascade** — a known data-integrity bug, small,
+   detailed under "Bugs found while writing the docs" below. Deleting a run
+   orphans its *grandchild* sub-runs, which then skew analytics forever.
+6. Tag and publish v0.2.0.
 
 **Deliberately deferred to immediately pre-launch**
 
@@ -94,72 +100,79 @@ Both are last-mile on purpose, not forgotten:
 - [x] Batch delete (selected rows, or everything matching the current filter)
 - [x] Path-style URLs (`/project/<id>/trace/<id>`) — shareable/deep-linkable
 - [x] Analytics: spend, tokens, latency, success rate, daily + by-model rollups
-- [x] Custom per-project model prices; built-in price table for 158 models
+- [x] Custom per-project model prices; built-in price table for 145 models
 - [x] API token management in the UI
 - [x] DB indexes on `runs`; `metadata` as JSONB + GIN on Postgres
 
 ### Distribution
 - [x] `pip install minion-ai`, PyPI Trusted Publishing workflow
 - [x] Docker image + compose files (SQLite, self-hosted Postgres, managed Postgres)
-- [x] Hosting / remote-tracing / release / publishing docs in `docs/`
+- [x] Documentation site (Astro + Starlight) in `website/`; `docs/` is a pointer
 - [x] CHANGELOG following Keep a Changelog
 
 ---
 
 ## Phase 0 — Land what's already written  ·  target: v0.1.4
 
-Working-tree changes that are done but uncommitted, plus one real bug found while
-verifying them.
-
 - [x] `parallel_tools` + per-tool-call latency + per-turn cost
 - [x] Trace-viewer rework (`FilterPanel`, `DeleteModal`, `TraceDetail`)
 - [x] Fix `minion serve` crashing on Windows cp1252 consoles (`UnicodeEncodeError` on `→`)
-- [ ] Commit, tag, publish v0.1.4
+- [x] Committed to `main`
+- [ ] ~~Tag and publish v0.1.4~~ — folded into v0.2.0; Phase 1 landed on top of it
+      before a release was cut, so there is no separate 0.1.4
 
 ## Phase 1 — Launch blockers
 
 Everything a stranger arriving from Product Hunt needs in order to succeed.
 
 **Provider compatibility — stop claiming "works with everything"**
-- [x] Tiered support model in [docs/providers.md](docs/providers.md): Tier 1
-      supported (OpenAI/Anthropic/Gemini) · Tier 2 should-work · Tier 3 unsupported
-- [ ] Reword the README + website to the tiered claim instead of "provider-agnostic"
-- [ ] Smoke test across the three Tier 1 providers — currently **none of them are
-      covered by an automated pass**, only Groq has been run live. Script it early,
-      **run it last** (see the deferred note in "Start here"): it needs paid keys, and
-      launch is gated on all three passing.
-- [ ] Fallback for Tier 3 models: prompt-injected schema + `json_object` + a bounded
-      reparse/retry. Verified failing today: `groq/llama-3.3-70b-versatile`
-- [ ] Groq pricing entries in `model_prices.json` (currently zero → cost shows unpriced)
-- [ ] Actionable error when a model can't do structured output, instead of a raw
-      LiteLLM `BadRequestError`
+- [x] Tiered support model: Tier 1 supported (OpenAI/Anthropic/Gemini) · Tier 2
+      should-work · Tier 3 not natively supported
+- [x] Reword the README + website to the tiered claim instead of "provider-agnostic"
+- [~] Smoke test across the three Tier 1 providers — `tests/smoke_providers.py` is
+      **written and dry-run clean, not yet run live**. It refuses to run without
+      `--i-understand-this-spends-money`. Launch is gated on all three passing.
+- [~] Fallback for Tier 3 models: `structured_output="prompt"` — schema injected
+      into the prompt + `json_object` + bounded reparse/retry. Implemented, 19
+      offline tests pass. **Not yet verified against a live
+      `groq/llama-3.3-70b-versatile`** — do that before the claim ships.
+- [x] Groq pricing entries in `model_prices.json` (gpt-oss-120b/20b,
+      llama-3.3-70b-versatile, llama-3.1-8b-instant)
+- [x] Actionable `StructuredOutputError` when a model can't do structured output,
+      instead of a raw LiteLLM `BadRequestError`
 
-**Website — Claude builds this in full (currently a coming-soon page)**
-- [ ] Landing page: what it is, code sample, screenshot, install
-- [ ] Demo video embedded above the fold  ← **needs Shriyans to record**
-- [ ] Docs section (structure below)
-- [ ] Public changelog page, generated from `CHANGELOG.md` — never hand-maintained
+**Website — Astro + Starlight, in `website/`**
+- [x] Landing page: what it is, code samples, install, provider tiers
+- [ ] Demo video embedded above the fold  ← **needs Shriyans to record**; drop the
+      URL into `DEMO_VIDEO_EMBED_URL` in `website/src/config.ts`. A CSS mock of the
+      trace viewer stands in until then
+- [x] Docs section (structure below)
+- [x] Public changelog page, generated from `CHANGELOG.md` at build time
+- [ ] Real screenshot of `minion serve` to replace the CSS mock
+- [ ] Pick a domain, set `SITE_URL`, and deploy
 
 **Docs — the main selling point, so treat them as a feature**
 
 Target: someone who has never seen the project, or who last touched it a month ago,
 can get productive from the docs alone. Applies to users *and* contributors.
 
-- [ ] **Getting started** — install, connect your LLM, first agent, first trace
-- [ ] **Guides / usage** — one page per capability: tools, sub-agents & specialists,
-      parallel tools, tracing & metadata, cost tracking, the dashboard
-- [ ] **Cookbook** — small complete runnable projects, each solving one real task
-      (not toy snippets); the "show me it works" section
-- [ ] **Deployment** — local SQLite vs Postgres: *when to use which and why*,
-      single-user vs team, remote tracing setup
-- [ ] **Reference** — `Minion(...)` args, `init(...)` args, CLI commands
-- [ ] **Contributing** — repo layout, running the dev loop, migrations, releasing
-- [ ] **Provider support** — fold in [docs/providers.md](docs/providers.md)
-- [ ] Every code sample copy-pasteable and actually executed before publishing
+- [x] **Getting started** — what it is, install, first agent, first trace
+- [x] **Guides / usage** — tools, sub-agents & specialists, parallel tools,
+      tracing & metadata, cost tracking, the dashboard
+- [x] **Cookbook** — three complete runnable programs: changelog writer,
+      codebase explainer, support triage
+- [x] **Deployment** — choosing a database, self-hosting, remote tracing,
+      team quickstart
+- [x] **Reference** — `Minion(...)`, `init(...)`, CLI, provider support
+- [x] **Contributing** — repo layout, dev loop, tests, migrations, releasing,
+      publishing setup
+- [x] Every code sample compiles; every cookbook tool function was executed
+      against real inputs (with the LLM stubbed). **The end-to-end agent runs in
+      the cookbook have not been executed live** — they need an API key
 
 **README**
-- [ ] Demo video / animated GIF near the top
-- [ ] Trim to a scannable landing README; push depth into the docs site
+- [ ] Demo video / animated GIF near the top *(placeholder comment marks the spot)*
+- [x] Trim to a scannable landing README; push depth into the docs site
 
 **Naming**
 - [x] `minion ui` → `minion serve` (clean rename, no alias — pre-1.0)
@@ -171,8 +184,18 @@ can get productive from the docs alone. Applies to users *and* contributors.
 - [ ] **Manual step at next release:** the Docker Hub repo `shriyansnaik/minion-server`
       is created on first push. Check the description/README on the new repo, and
       consider marking the old `minion-ui` repo deprecated.
-- [ ] Name the dashboard surface itself, now that evals will live there too — the
-      docs need one consistent noun for it
+- [~] Name the dashboard surface itself, now that evals will live there too. The
+      docs now say **"the dashboard"** throughout, and `minion serve` /
+      `minion-server` for the thing that runs it. Consistent, but not a decision —
+      revisit before evals ship if a better noun exists.
+
+**Bugs found while writing the docs**
+- [ ] **Delete cascades only one level.** `_cascade_delete_runs` in
+      `minions/server/app.py` collects sub-runs whose `parent_trace_id` matches a
+      deleted run, but doesn't recurse. A specialist that itself delegated leaves
+      grandchild runs orphaned — invisible in the trace list (top-level only) but
+      still counted in analytics totals. Documented honestly on the dashboard page
+      meanwhile.
 
 ---
 

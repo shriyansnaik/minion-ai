@@ -1,7 +1,7 @@
 # Builds the Python package and publishes it to PyPI via Trusted Publishing
 # (OIDC) — no API token is stored anywhere.
 #
-# One-time setup on PyPI (see docs/publishing-to-pypi.md):
+# One-time setup on PyPI (see https://minion-ai.vercel.app/contributing/publishing/):
 #   pypi.org -> project minion-ai -> Settings -> Publishing -> add a GitHub
 #   trusted publisher:  owner = shriyansnaik, repo = minion-ai,
 #   workflow = pypi-publish.yml, environment = (leave blank)

@@ -3,9 +3,23 @@
 </p>
 
 <p align="center">
-  A lightweight, provider-agnostic agentic framework.<br/>
-  Build AI agents that think, use tools, and delegate to sub-agents — with observability baked in.
+  A lightweight agentic framework with observability baked in.<br/>
+  Build agents that think, use tools, and delegate — then see every turn, token and dollar.
 </p>
+
+<p align="center">
+  <a href="https://pypi.org/project/minion-ai"><img src="https://img.shields.io/pypi/v/minion-ai.svg" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/minion-ai"><img src="https://img.shields.io/pypi/pyversions/minion-ai.svg" alt="Python versions" /></a>
+</p>
+
+<p align="center">
+  <b><a href="https://minion-ai.vercel.app">Docs</a></b> ·
+  <a href="https://minion-ai.vercel.app/getting-started/installation/">Quickstart</a> ·
+  <a href="https://minion-ai.vercel.app/cookbook/">Cookbook</a> ·
+  <a href="https://minion-ai.vercel.app/changelog/">Changelog</a>
+</p>
+
+<!-- DEMO VIDEO / GIF GOES HERE — see ROADMAP.md -->
 
 ---
 
@@ -15,144 +29,84 @@
 pip install minion-ai
 ```
 
-## Quick Start
+## Quick start
 
 ```python
 import minions
-from minions.demo_tools import read_file, list_files
 
-def search_web(query: str) -> str:
-    """Search the web and return results.
-
-    Args:
-        query: The search query.
-    """
-    # your implementation
-    ...
-
-minions.init(api_key="your-api-key")  # or set ANTHROPIC_API_KEY / OPENAI_API_KEY env var
-
-agent = minions.Minion(
-    model="anthropic/claude-opus-4",
-    tools=[search_web, read_file],
-)
-
-result = agent("Summarise the contents of report.pdf")
-print(result)
-```
-
-## Supported Providers
-
-Any provider supported by [LiteLLM](https://github.com/BerriAI/litellm) works out of the box — just change the model string:
-
-```python
-minions.Minion(model="openai/gpt-4o", ...)
-minions.Minion(model="anthropic/claude-opus-4", ...)
-minions.Minion(model="gemini/gemini-2.5-pro", ...)
-```
-
-API keys are read from the standard env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) or passed via `minions.init()`.
-
-## Sub-Agents
-
-Minion can spawn sub-agents to parallelise large tasks:
-
-```python
-agent = minions.Minion(
-    model="anthropic/claude-opus-4",
-    tools=[read_file, list_files],
-    allow_sub_agents=True,
-    secondary_model="anthropic/claude-haiku-4-5",  # cheaper model for sub-tasks
-)
-
-result = agent("Summarise every file in the /reports directory")
-```
-
-The agent automatically delegates when it sees 3+ independent items to process.
-
-## Tracing & UI
-
-Enable tracing to record every run, turn, and tool call to a local SQLite database, then inspect them in the built-in dashboard.
-
-```bash
-pip install minion-ai
-```
-
-```python
-minions.init(
-    api_key="...",
-    tracing=True,
-    project="my-project",   # required when tracing=True
-)
-
-agent = minions.Minion(model="openai/gpt-4o", tools=[...])
-agent("Do something interesting")
-```
-
-Launch the dashboard:
-
-```bash
-minion serve
-```
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/shriyansnaik/minion-ai/main/assets/minions-icon-tile.png" alt="Minions UI" height="80" />
-</p>
-
-The UI groups traces by project, lets you drill into every turn and tool call, and shows token usage and cost estimates in real time.
-
-### Remote tracing (team server)
-
-To send traces to a shared minion-server instead of a local file, add `trace_url`
-and a project-scoped token (create one in the dashboard under a project's
-**Settings → API Tokens**):
-
-```python
-minions.init(
-    tracing=True,
-    project="my-project",
-    trace_url="https://traces.mycompany.com",
-    tracing_secret_token="mni_xK9mP2...",
-)
-```
-
-In this mode nothing is written locally — runs are pushed over HTTP to the server.
-Tracing never raises: if the server is unreachable the push is skipped and your
-agent keeps running.
-
-### Running the server
-
-The dashboard server ships as a container:
-
-```bash
-docker compose up            # SQLite (default), data in a named volume
-```
-
-For a team-scale deployment, point it at Postgres via `DATABASE_URL` (SQLite stays
-the default when it's unset):
-
-```bash
-docker compose -f docker-compose.postgres.yml up          # self-hosted Postgres
-docker compose -f docker-compose.managed-postgres.yml up  # RDS / Supabase / Neon
-```
-
-See **[docs/](docs/)** for full hosting, remote-tracing, and image-publishing guides.
-
-## Building Tools
-
-Any Python function with a docstring and typed args works as a tool:
-
-```python
-def get_weather(city: str, unit: str = "celsius") -> str:
+def get_weather(city: str) -> str:
     """Get the current weather for a city.
 
     Args:
         city: Name of the city.
-        unit: Temperature unit, either 'celsius' or 'fahrenheit'.
     """
-    ...
+    return f"{city}: 22°C, clear"
+
+minions.init(tracing=True, project="demo")
 
 agent = minions.Minion(model="openai/gpt-4o", tools=[get_weather])
+print(agent("Should I take a jacket in Oslo today?"))
 ```
 
-See `minions/demo_tools.py` for more examples.
+```bash
+minion serve      # dashboard on http://localhost:7337
+```
+
+A tool is a plain function — its signature and docstring *are* the schema.
+Tracing is one flag, and writes to a local SQLite file you own.
+
+## What you get
+
+- **Tools from plain functions** — docstring + type hints, nothing to keep in sync
+- **Sub-agents** — ad-hoc workers for fan-out, or named specialists you compose
+- **Parallel tool calls** — `parallel_tools=True`, with per-call latency that stays honest
+- **Local tracing** — every run, turn and tool call to SQLite, no account required
+- **Cost tracking** — per turn and per run, from a built-in table of 145 models
+- **A dashboard you run** — filter, drill into any turn, roll spend up by day or model
+- **Remote tracing** — point a team's agents at one server you host
+
+## Supported models
+
+Minion asks the model for a strict JSON envelope every turn, so **a model works
+only if its provider supports native JSON-schema structured output**.
+
+| Tier | Models | Status |
+| --- | --- | --- |
+| **1** | OpenAI, Anthropic, Gemini | Supported — tested before each release |
+| **2** | Any other LiteLLM model with native schema output (`groq/openai/gpt-oss-120b`, Azure, vLLM) | Should work, not release-tested |
+| **3** | Models without schema output (`groq/llama-3.3-70b-versatile`, most small local models) | Not supported natively — usable via `structured_output="prompt"` |
+
+```python
+import litellm
+litellm.supports_response_schema(model="openai/gpt-4o")   # check before you commit
+```
+
+Switching provider is just the model string:
+
+```python
+minions.Minion(model="anthropic/claude-opus-4", tools=[get_weather])
+```
+
+Full matrix and failure modes: **[Provider support](https://minion-ai.vercel.app/reference/providers/)**.
+
+## Docs
+
+Everything lives at **[minion-ai.vercel.app](https://minion-ai.vercel.app)**:
+
+| | |
+| --- | --- |
+| [Getting started](https://minion-ai.vercel.app/getting-started/what-is-minion/) | Install, first agent, first trace |
+| [Guides](https://minion-ai.vercel.app/guides/tools/) | Tools, sub-agents, parallel tools, tracing, cost, the dashboard |
+| [Cookbook](https://minion-ai.vercel.app/cookbook/) | Complete runnable programs |
+| [Deployment](https://minion-ai.vercel.app/deployment/choosing-a-database/) | SQLite vs Postgres, self-hosting, remote tracing |
+| [Reference](https://minion-ai.vercel.app/reference/minion/) | `Minion(...)`, `init(...)`, the CLI, providers |
+| [Contributing](https://minion-ai.vercel.app/contributing/) | Repo layout, dev loop, migrations, releasing |
+
+## Contributing
+
+Issues and PRs welcome — see
+[Contributing](https://minion-ai.vercel.app/contributing/) for the repo layout
+and the dev loop. Reports from **Tier 2 models** are especially useful: if you
+ran Minion on a model that isn't in the table above, both answers help.
+
+Roadmap and status: [ROADMAP.md](ROADMAP.md).

@@ -1,0 +1,20 @@
+{
+  "name": "minion-website",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "changelog": "node scripts/generate-changelog.mjs",
+    "predev": "npm run changelog",
+    "dev": "astro dev",
+    "prebuild": "npm run changelog",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.36.0",
+    "astro": "^5.14.0",
+    "sharp": "^0.34.0"
+  }
+}

@@ -1,1 +1,8 @@
 .vercel
+node_modules/
+dist/
+.astro/
+.DS_Store
+
+# Generated from the repo's CHANGELOG.md at build time — never edit or commit.
+src/content/docs/changelog.md

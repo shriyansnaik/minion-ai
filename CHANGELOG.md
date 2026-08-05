@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- Add `structured_output` to `Minion`: `"auto"` (default) uses native JSON-schema enforcement where the provider supports it and the prompted fallback where it doesn't, `"native"` never falls back, `"prompt"` always uses the fallback. The fallback injects the schema into the system prompt, asks for `json_object` mode, and re-prompts on a malformed reply up to `max_parse_retries` times (default 2) — this makes previously unusable models such as `groq/llama-3.3-70b-versatile` work
+- Replace the raw LiteLLM `BadRequestError` from a model that can't do structured output with a `StructuredOutputError` naming the model, explaining the requirement, and listing the ways forward. Errors unrelated to structured output propagate unchanged
+- Reparse retries are charged to the turn that made them, so a run that retried reports the tokens it actually spent
+- Add `minion --help` / `--version`; `minion serve --help` now prints usage instead of silently starting the server
+- Add built-in prices for Groq's `gpt-oss-120b`, `gpt-oss-20b`, `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` — their traces showed as unpriced before
+- Add a documentation site (Astro + Starlight) under `website/`, with a public changelog page generated from this file. `docs/` is now a pointer to it
+- Add `tests/`: offline tests for the structured-output paths (no API calls), and `tests/smoke_providers.py`, a live Tier 1 provider gate that refuses to run without an explicit flag
 - Add `parallel_tools=True` to run a turn's tool calls concurrently; each call is now timed independently so latencies stay accurate under parallelism
 - Show per-turn cost in the trace viewer, computed the same way as the run total so turns sum back to it
 - **Breaking:** rename the CLI command `minion ui` → `minion serve`. The old name is removed, not aliased — it named the technology rather than the job, and the dashboard now covers traces, analytics and (soon) evals
